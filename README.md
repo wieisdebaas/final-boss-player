@@ -1,99 +1,146 @@
-# Endboss Music Player
+# End Boss Player
 
-Endboss is an Omarchy Quickshell music player plugin backed by the `endbossd`
-Rust daemon. It streams from your music folders (including NAS mounts) with no
-copying, keeps a SQLite index, and exposes media keys over MPRIS. The plugin id
-is `io.github.endboss.player`.
+<p align="center">
+  <img src="preview.png" alt="End Boss Player logo" width="220" />
+</p>
 
-**User guide:** [docs/MANUAL.md](docs/MANUAL.md)
+<p align="center">
+  <strong>Your NAS. Your Music. Always Playing.</strong><br/>
+  Lightweight Omarchy / Quickshell music player for local and NAS libraries.
+</p>
 
-## Install
+<p align="center">
+  <a href="https://omarchy.org/">Omarchy</a> ·
+  <a href="docs/MANUAL.md">User manual</a> ·
+  <a href="docs/MARKETPLACE.md">Marketplace listing</a> ·
+  <a href="LICENSE">MIT</a>
+</p>
+
+End Boss Player indexes music folders you already have mounted (SMB/NFS/local),
+streams audio from disk without copying the library, and keeps a small SQLite
+index on your machine. The UI is an Omarchy shell plugin (bar mini-player +
+panel); playback runs in a Rust daemon (`endbossd`) with MPRIS media-key
+support.
+
+| | |
+| --- | --- |
+| **Display name** | End Boss Player |
+| **Plugin id** | `io.github.endboss.player` |
+| **Daemon** | `endbossd` |
+| **License** | MIT |
+
+## Install (Omarchy)
+
+Requires [Omarchy](https://omarchy.org/) (Quickshell shell), a Rust toolchain
+(`rustup` / `cargo`), and a working audio stack (PipeWire/Pulse).
 
 ```sh
-scripts/install.sh            # build release, install, enable + start the unit, link plugin
-scripts/install.sh --dry-run  # show what would happen
-scripts/install.sh --uninstall
+# 1. Install the shell plugin
+omarchy plugin add https://github.com/wieisdebaas/endboss-player.git --enable
+
+# 2. Build and enable the playback daemon (systemd --user)
+cd ~/.config/omarchy/plugins/io.github.endboss.player
+./scripts/install.sh
+
+# 3. Reload the shell and place the widget on the bar if needed
+omarchy-restart-shell
 ```
 
-This installs:
+Open **End Boss Player** from the bar → **Settings** → add a music folder path
+(for example `/mnt/nas/Music`).
 
-- `~/.local/lib/endboss/endbossd` (release binary)
-- `~/.config/systemd/user/endbossd.service` (rendered from `systemd/endbossd.service`)
-- `~/.config/omarchy/plugins/io.github.endboss.player` (symlink to this repo)
-
-It never restarts the Omarchy shell. Afterwards run `omarchy-restart-shell`
-(or enable the plugin in shell settings) and add **Endboss Player** to the bar.
-Then open the panel, go to **Settings**, and add your music folder.
+### Check status
 
 ```sh
 systemctl --user status endbossd
 journalctl --user -u endbossd -f
+omarchy plugin list | grep endboss
 ```
 
-## Run from source
+### Update
 
 ```sh
-cd daemon
-cargo run                  # start the daemon
-cargo run -- --print-paths # print state, cache, runtime, db, art, and socket paths
-scripts/dev-link.sh        # symlink the plugin only (--unlink to remove)
+omarchy plugin update io.github.endboss.player
+cd ~/.config/omarchy/plugins/io.github.endboss.player
+./scripts/install.sh          # rebuild daemon after updates
+omarchy-restart-shell
 ```
 
-## Bar mini-player
+### Remove
 
-| Input        | Action                         |
-| ------------ | ------------------------------ |
-| Left click   | Toggle mini-player popup       |
-| Middle click | Play / pause                   |
-| Right click  | Open the full player panel     |
-| Scroll       | Previous / next track          |
-| `Esc`        | Close the popup                |
+```sh
+cd ~/.config/omarchy/plugins/io.github.endboss.player
+./scripts/install.sh --uninstall
+omarchy plugin remove io.github.endboss.player --yes
+omarchy-restart-shell
+```
 
-The popup shows cover art, title, artist, progress, and previous / play / next.
+`install.sh --uninstall` removes the daemon binary, user unit, and plugin
+symlink helpers. The SQLite index and artwork cache under
+`~/.local/state/endboss/` and `~/.cache/endboss/` are left in place unless you
+delete them yourself.
 
-The full player’s bottom bar also has **shuffle** (⇄). When enabled, upcoming tracks play in random order after the current song.
+## Features
 
-Clicking a track in Library / search / album lists starts it; clicking the **currently loaded** track toggles play / pause.
+- Stream FLAC / MP3 / M4A / AAC / WAV / OGG from mounted NAS or local folders
+- SQLite library index (artists, albums, tracks, search)
+- Full panel: Home, Search, Library, Artists, Albums, Settings
+- Persistent bottom player + bar mini-player
+- Shuffle, seek, volume, mute, MPRIS media keys
+- Timed I/O so a stalled share does not freeze the shell
+- Omarchy theme colours
 
-## Panel shortcuts
+See the [user manual](docs/MANUAL.md) for shortcuts and troubleshooting.
 
-| Key                  | Action                |
-| -------------------- | --------------------- |
-| `Space`              | Play / pause          |
-| `Ctrl+Left / Right`  | Previous / next       |
-| `Shift+Left / Right` | Seek -5s / +5s        |
-| `Ctrl+Up / Down`     | Volume up / down      |
-| `M`                  | Mute                  |
-| `Ctrl+F`             | Search                |
-| `Esc`                | Close the panel       |
+## Dependencies
 
-## Media keys (MPRIS)
+| Component | Needs |
+| --- | --- |
+| Plugin UI | Omarchy 4+ / Quickshell |
+| Daemon | Rust (edition 2021), `cargo`, ALSA/PipeWire for playback |
+| Optional | `playerctl` for CLI media control |
 
-While `endbossd` runs it registers `org.mpris.MediaPlayer2.endboss` on the
-session bus, so keyboard media keys and `playerctl -p endboss ...` work with the
-panel closed. Supported: Play, Pause, PlayPause, Stop (pauses), Next, Previous,
-Seek, SetPosition, and PlaybackStatus / Metadata (title, artist, album, length,
-cached art) / Position / Volume. Not supported: TrackList, Playlists, Raise/Quit,
-writable Shuffle/LoopStatus/Volume, and the `Seeked` signal. If no session bus is
-available the daemon logs a warning and keeps running without MPRIS.
-
-## Known limitations
-
-- **Network shares (NAS).** Scanning, opening a track for playback, and reading
-  cover art all use time-limited I/O (5 s), so a dead mount reports
-  `file_unavailable` / `player_busy` instead of freezing the daemon or the shell.
-  A share that stalls *in the middle* of a stream is read inside the audio
-  callback and cannot be time-limited: expect audible dropouts until it recovers.
-- **Formats.** `.opus` files are indexed but cannot be played: the decoder
-  (rodio/symphonia) is built without Opus support, so playback fails with
-  `decode_failed`. ALAC in `.m4a` is not enabled either.
-- **Logs.** `endbossd` logs to stderr (`journalctl --user -u endbossd`); set
-  `RUST_LOG` (default `endbossd=info`) to change verbosity.
+Formats: Opus and ALAC-in-M4A are indexed but may not play with the current
+decoder (documented in the manual).
 
 ## Development
 
 ```sh
-cd daemon
-cargo test
-cargo clippy --all-targets -- -D warnings
+git clone https://github.com/wieisdebaas/endboss-player.git
+cd endboss-player
+
+# Link into Omarchy + build daemon
+./scripts/dev-link.sh
+./scripts/install.sh
+
+# Daemon tests
+cd daemon && cargo test && cargo clippy --all-targets -- -D warnings
+
+# Validate plugin layout (required before publishing)
+omarchy plugin validate .
 ```
+
+Design and implementation notes live under `docs/superpowers/` for contributors.
+
+## Discoverability
+
+**Omarchy shell search aliases** (bar / plugin picker): `music`, `player`,
+`endboss`, `end boss`, `nas`, `audio`, `library`, `mpris`, `flac`, `local-music`.
+
+**Marketplace tags** (see [docs/MARKETPLACE.md](docs/MARKETPLACE.md)):
+
+- Category: `Desktop`
+- Tags: `media`, `quickshell`, `bar`
+
+**Suggested GitHub topics:** `omarchy`, `quickshell`, `music-player`, `nas`,
+`hyprland`, `qml`, `rust`, `linux`, `mpris`, `flac`.
+
+## Privacy
+
+No accounts, no cloud, no online metadata lookups. Music stays on your mounts;
+only a local index and small artwork thumbnails are written under your home
+directory.
+
+## License
+
+[MIT](LICENSE) © 2026 Robin Smits

@@ -84,15 +84,16 @@ BarWidget {
     anchors.centerIn: parent
     spacing: Style.space(6)
 
-    Text {
-      id: glyph
+    Image {
+      id: logo
       anchors.verticalCenter: parent.verticalCenter
-      textFormat: Text.PlainText
-      color: root.foreground
+      width: Style.font.body + 4
+      height: Style.font.body + 4
+      source: Qt.resolvedUrl("icon.png")
+      fillMode: Image.PreserveAspectFit
+      smooth: true
+      mipmap: true
       opacity: root.connected ? 1 : 0.5
-      font.family: root.bar ? root.bar.fontFamily : ""
-      font.pixelSize: Style.font.body
-      text: root.isPlaying ? "\u266B" : "\u266A"
     }
 
     Text {

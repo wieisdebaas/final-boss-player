@@ -1,14 +1,19 @@
 #!/usr/bin/env bash
-# Build and install Endboss for the current user.
+# Build and install End Boss Player's daemon for the current user.
 #
-#   scripts/install.sh              build release, install, enable + start unit, link plugin
+#   scripts/install.sh              build release, install, enable + start unit
 #   scripts/install.sh --dry-run    print what would happen, change nothing
-#   scripts/install.sh --uninstall  stop/disable the unit, remove the binary and plugin link
+#   scripts/install.sh --uninstall  stop/disable the unit, remove the binary
 #
 # Installs:
 #   ~/.local/lib/endboss/endbossd                 release binary
 #   ~/.config/systemd/user/endbossd.service       user unit (from systemd/endbossd.service)
-#   ~/.config/omarchy/plugins/<plugin-id>         symlink to this repo (scripts/dev-link.sh)
+#
+# Plugin UI:
+#   Prefer:  omarchy plugin add <repo> --enable
+#   Then run this script from the installed plugin directory.
+#   For local development from a git checkout, this script also tries
+#   scripts/dev-link.sh (skipped if the plugin is already a real install).
 #
 # It never restarts the Omarchy shell; do that yourself afterwards
 # (e.g. `omarchy-restart-shell`) or enable the plugin from shell settings.
@@ -51,9 +56,13 @@ if [[ $UNINSTALL -eq 1 ]]; then
   fi
   run rm -f "$UNIT" "$BINARY"
   run rmdir "$LIB_DIR" 2>/dev/null || true
-  run "$REPO/scripts/dev-link.sh" --unlink
+  # Only unlink a development symlink; leave omarchy plugin add installs alone.
+  if [[ -L "${XDG_CONFIG_HOME:-$HOME/.config}/omarchy/plugins/io.github.endboss.player" ]]; then
+    run "$REPO/scripts/dev-link.sh" --unlink
+  fi
   have_systemd_user && run systemctl --user daemon-reload || true
-  echo "Uninstalled. Library database and cache were left in place."
+  echo "Uninstalled endbossd. Library database and cache were left in place."
+  echo "Remove the shell plugin with: omarchy plugin remove io.github.endboss.player --yes"
   exit 0
 fi
 
@@ -89,14 +98,23 @@ else
   echo "Start manually: $BINARY" >&2
 fi
 
-echo "==> Linking Omarchy plugin"
-run "$REPO/scripts/dev-link.sh"
+PLUGIN_ID="io.github.endboss.player"
+PLUGIN_TARGET="${XDG_CONFIG_HOME:-$HOME/.config}/omarchy/plugins/$PLUGIN_ID"
+if [[ -L "$PLUGIN_TARGET" ]] || [[ ! -e "$PLUGIN_TARGET" ]]; then
+  echo "==> Linking Omarchy plugin (development)"
+  run "$REPO/scripts/dev-link.sh"
+elif [[ "$(cd "$PLUGIN_TARGET" && pwd -P)" == "$(cd "$REPO" && pwd -P)" ]]; then
+  echo "==> Omarchy plugin already installed at $PLUGIN_TARGET (skipping link)"
+else
+  echo "==> Omarchy plugin already present at $PLUGIN_TARGET; not overwriting."
+  echo "    Daemon install is complete. Enable with: omarchy plugin enable $PLUGIN_ID"
+fi
 
 cat <<MSG
 
 Done. Next:
   1. Restart the Omarchy shell (omarchy-restart-shell) and enable/place the
-     "Endboss Player" bar widget.
+     "End Boss Player" bar widget.
   2. Open the panel, go to Settings and add your music folder (e.g. a NAS mount).
   3. Check the daemon:  systemctl --user status endbossd
      Media keys / playerctl work via MPRIS (org.mpris.MediaPlayer2.endboss).

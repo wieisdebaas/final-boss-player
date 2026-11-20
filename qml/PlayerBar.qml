@@ -124,12 +124,65 @@ Rectangle {
         font.bold: true
         text: root.service && root.service.hasMedia ? root.service.title : "Nothing playing"
       }
-      Text {
+      Row {
+        id: footerByline
         width: parent.width
-        elide: Text.ElideRight
-        color: Color.muted
-        font.pixelSize: 12
-        text: root.service ? root.service.artist : ""
+        spacing: 0
+        visible: root.service && root.service.hasMedia
+
+        readonly property string artistName: root.trackInfo && root.trackInfo.artist
+          ? String(root.trackInfo.artist) : ""
+        readonly property string albumName: root.trackInfo && root.trackInfo.album
+          ? String(root.trackInfo.album) : ""
+        readonly property bool hasArtist: !!(root.trackInfo && root.trackInfo.artist_id !== undefined
+          && root.trackInfo.artist_id !== null && artistName !== "")
+        readonly property bool hasAlbum: !!(root.trackInfo && root.trackInfo.album_id !== undefined
+          && root.trackInfo.album_id !== null && albumName !== "")
+
+        Text {
+          id: footerArtist
+          elide: Text.ElideRight
+          width: Math.min(implicitWidth, footerByline.width * 0.5)
+          color: footerArtistArea.containsMouse ? Color.accent : Color.muted
+          font.pixelSize: 12
+          font.underline: footerArtistArea.containsMouse
+          text: footerByline.artistName
+          visible: text !== ""
+          MouseArea {
+            id: footerArtistArea
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: footerByline.hasArtist ? Qt.PointingHandCursor : Qt.ArrowCursor
+            enabled: footerByline.hasArtist
+            onClicked: if (root.service) root.service.openArtistFromTrack(root.trackInfo)
+          }
+        }
+        Text {
+          id: footerSep
+          color: Color.muted
+          font.pixelSize: 12
+          text: " \u00B7 "
+          visible: footerArtist.visible && footerAlbum.visible
+        }
+        Text {
+          id: footerAlbum
+          elide: Text.ElideRight
+          width: Math.max(0, footerByline.width - footerArtist.width
+            - (footerSep.visible ? footerSep.width : 0))
+          color: footerAlbumArea.containsMouse ? Color.accent : Color.muted
+          font.pixelSize: 12
+          font.underline: footerAlbumArea.containsMouse
+          text: footerByline.albumName
+          visible: text !== ""
+          MouseArea {
+            id: footerAlbumArea
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: footerByline.hasAlbum ? Qt.PointingHandCursor : Qt.ArrowCursor
+            enabled: footerByline.hasAlbum
+            onClicked: if (root.service) root.service.openAlbumFromTrack(root.trackInfo)
+          }
+        }
       }
     }
   }

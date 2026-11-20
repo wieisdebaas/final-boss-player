@@ -57,7 +57,7 @@ Item {
   FloatingWindow {
     id: window
     visible: root.opened
-    title: "Endboss Player"
+    title: "End Boss Player"
     color: Color.background
     implicitWidth: 900
     implicitHeight: 640
@@ -151,12 +151,25 @@ Item {
             anchors.margins: 12
             spacing: 4
 
-            Text {
-              color: Color.accent
-              font.pixelSize: 15
-              font.bold: true
+            Row {
+              spacing: 8
               bottomPadding: 12
-              text: "Endboss"
+              Image {
+                width: 28
+                height: 28
+                anchors.verticalCenter: parent.verticalCenter
+                source: Qt.resolvedUrl("icon.png")
+                fillMode: Image.PreserveAspectFit
+                smooth: true
+                mipmap: true
+              }
+              Text {
+                anchors.verticalCenter: parent.verticalCenter
+                color: Color.accent
+                font.pixelSize: 14
+                font.bold: true
+                text: "End Boss Player"
+              }
             }
 
             Repeater {

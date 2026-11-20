@@ -178,6 +178,7 @@ fn queue_item(track: &crate::db::Track) -> QueueItem {
             "duration_ms": track.duration_ms,
             "has_art": track.has_art,
             "album_id": track.album_id,
+            "artist_id": track.artist_id,
         }),
     }
 }

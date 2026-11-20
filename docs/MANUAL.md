@@ -1,31 +1,36 @@
-# Endboss Player — User Manual
+# End Boss Player — User Manual
 
 **Your NAS. Your Music. Always Playing.**
 
-Endboss Player is a lightweight Omarchy music player. It indexes music folders you already have mounted (local disk or NAS), streams from those paths, and never copies your library onto the machine.
+**End Boss Player** (tech short name: **endboss**) is a lightweight Omarchy music player. It indexes music folders you already have mounted (local disk or NAS), streams from those paths, and never copies your library onto the machine.
 
 ---
 
 ## First-time setup
 
-### 1. Install
+### 1. Install the plugin + daemon
 
-From the project directory:
+**From Omarchy (recommended for users):**
 
 ```sh
-scripts/install.sh
+omarchy plugin add https://github.com/wieisdebaas/endboss-player.git --enable
+cd ~/.config/omarchy/plugins/io.github.endboss.player
+./scripts/install.sh
+omarchy-restart-shell
 ```
 
-That installs the `endbossd` daemon, a systemd user service, and links the Omarchy plugin.
+`omarchy plugin add` installs the UI only. `scripts/install.sh` builds `endbossd`
+and enables the systemd user service. You need a Rust toolchain (`cargo`) once.
 
-### 2. Enable the UI
+**From a git checkout (developers):**
 
 ```sh
+./scripts/install.sh
 omarchy plugin enable io.github.endboss.player
 omarchy-restart-shell
 ```
 
-Add **Endboss Player** to your bar if it is not already there (Omarchy bar / widget settings).
+Add **End Boss Player** to your bar if it is not already there (Omarchy bar / widget settings).
 
 ### 3. Add a music folder
 
@@ -95,7 +100,7 @@ The bottom bar always shows the current track and play / pause / seek / volume. 
 
 **Shuffle** is the ⇄ control on the bottom player bar. When on (accent colour), the rest of the queue is randomized so **Next** picks a shuffled order; the current song finishes first. Turn it off to return to album/list order from the current track.
 
-**Library click:** tapping a different track starts it; tapping the track that is already loaded toggles play / pause.
+**Library click:** tapping a track title starts it (or toggles pause if it is already loaded). Tapping the **artist** or **album** under the title opens that Artist or Album page. Lists have a **draggable scrollbar** on the right.
 
 ### Media keys
 
@@ -143,13 +148,15 @@ Original audio files are never modified or copied into these locations.
 Uninstall:
 
 ```sh
-scripts/install.sh --uninstall
+./scripts/install.sh --uninstall
+omarchy plugin remove io.github.endboss.player --yes
+omarchy-restart-shell
 ```
 
 The library database and artwork cache are left in place unless you delete them yourself.
 
 ---
 
-## What Endboss does not do (v1)
+## What End Boss Player does not do (v1)
 
-No playlists, Spotify, cloud accounts, lyrics, online metadata, or built-in SMB/NFS client. Use the OS to mount network shares, then point Endboss at the mount path.
+No playlists, Spotify, cloud accounts, lyrics, online metadata, or built-in SMB/NFS client. Use the OS to mount network shares, then point End Boss Player at the mount path.

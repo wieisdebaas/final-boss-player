@@ -1,11 +1,13 @@
 {
   "schemaVersion": 1,
   "id": "io.github.endboss.player",
-  "name": "Endboss Player",
+  "name": "End Boss Player",
   "version": "0.1.0",
-  "author": "endboss",
+  "author": "Robin Smits",
   "license": "MIT",
-  "description": "Local music player for Omarchy, driven by the endbossd daemon.",
+  "homepage": "https://github.com/wieisdebaas/endboss-player",
+  "description": "Stream your NAS and local music library from the Omarchy bar and panel.",
+  "icon": "icon.png",
   "kinds": [
     "service",
     "bar-widget",
@@ -18,13 +20,20 @@
     "panel": "Panel.qml"
   },
   "barWidget": {
-    "displayName": "Endboss Player",
-    "description": "Local music library and player backed by endbossd.",
+    "displayName": "End Boss Player",
+    "description": "Local / NAS music library and player (endbossd).",
     "category": "Media",
     "aliases": [
       "music",
       "player",
-      "endboss"
+      "endboss",
+      "end boss",
+      "nas",
+      "audio",
+      "library",
+      "mpris",
+      "flac",
+      "local-music"
     ],
     "allowMultiple": false,
     "defaultSection": "left"

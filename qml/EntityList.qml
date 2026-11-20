@@ -1,5 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
+import QtQuick.Controls
 import qs.Commons
 
 // Generic album/artist rows. `items` entries are daemon objects; `secondaryOf`
@@ -19,6 +20,16 @@ ListView {
   clip: true
   model: items
   boundsBehavior: Flickable.StopAtBounds
+  ScrollBar.vertical: ScrollBar {
+    policy: ScrollBar.AsNeeded
+    width: 10
+    contentItem: Rectangle {
+      implicitWidth: 6
+      radius: 3
+      color: Qt.rgba(Color.foreground.r, Color.foreground.g, Color.foreground.b,
+                     parent.hovered || parent.pressed ? 0.45 : 0.28)
+    }
+  }
 
   delegate: Rectangle {
     id: row

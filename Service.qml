@@ -84,6 +84,25 @@ Item {
     currentPage = "artists"
   }
 
+  function openAlbumFromTrack(track) {
+    if (!track || track.album_id === undefined || track.album_id === null) return false
+    openAlbum({
+      id: Number(track.album_id),
+      name: track.album || "Unknown album",
+      album_artist: track.album_artist || track.artist || null
+    })
+    return true
+  }
+
+  function openArtistFromTrack(track) {
+    if (!track || track.artist_id === undefined || track.artist_id === null) return false
+    openArtist({
+      id: Number(track.artist_id),
+      name: track.artist || "Unknown artist"
+    })
+    return true
+  }
+
   function focusSearch() {
     currentPage = "search"
     searchFocusRequest++

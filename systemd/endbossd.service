@@ -1,5 +1,5 @@
 [Unit]
-Description=Endboss music daemon (endbossd)
+Description=End Boss Player music daemon (endbossd)
 Documentation=https://github.com/endboss/endboss-player
 # Rendered by scripts/install.sh: @BINARY@ is replaced with the installed path.
 
