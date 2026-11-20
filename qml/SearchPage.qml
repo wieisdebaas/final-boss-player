@@ -93,16 +93,6 @@ Item {
         clip: true
         text: root.queryText
         onTextChanged: if (root.service && root.service.searchQuery !== text) root.service.searchQuery = text
-        // First Esc clears the query; with an empty field it falls through
-        // to the panel, which closes the window.
-        Keys.onEscapePressed: function(event) {
-          if (text !== "") {
-            text = ""
-            event.accepted = true
-          } else {
-            event.accepted = false
-          }
-        }
 
         Text {
           anchors.verticalCenter: parent.verticalCenter

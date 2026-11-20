@@ -80,26 +80,57 @@ Item {
         }
       }
 
-      // Text inputs accept the keys they consume (space, M, Ctrl+Left, ...)
-      // before they reach this handler, so typing in search is unaffected.
-      Keys.onPressed: function(event) {
-        var svc = root.service
-        if (!svc) return
-        var ctrl = (event.modifiers & Qt.ControlModifier) !== 0
-        var shift = (event.modifiers & Qt.ShiftModifier) !== 0
-        var plain = event.modifiers === Qt.NoModifier
-        event.accepted = true
-        if (event.key === Qt.Key_Escape) root.requestClose()
-        else if (event.key === Qt.Key_Space && plain) svc.toggle()
-        else if (event.key === Qt.Key_M && plain) svc.toggleMute()
-        else if (event.key === Qt.Key_F && ctrl) svc.focusSearch()
-        else if (event.key === Qt.Key_Right && ctrl) svc.next()
-        else if (event.key === Qt.Key_Left && ctrl) svc.previous()
-        else if (event.key === Qt.Key_Right && shift) svc.seekBy(5000)
-        else if (event.key === Qt.Key_Left && shift) svc.seekBy(-5000)
-        else if (event.key === Qt.Key_Up && ctrl) svc.volumeBy(0.05)
-        else if (event.key === Qt.Key_Down && ctrl) svc.volumeBy(-0.05)
-        else event.accepted = false
+      // Window shortcuts receive ShortcutOverride events before focused text
+      // inputs can consume editing keys.
+      Shortcut {
+        sequence: "Space"
+        context: Qt.WindowShortcut
+        onActivated: if (root.service) root.service.toggle()
+      }
+      Shortcut {
+        sequence: "Ctrl+Left"
+        context: Qt.WindowShortcut
+        onActivated: if (root.service) root.service.previous()
+      }
+      Shortcut {
+        sequence: "Ctrl+Right"
+        context: Qt.WindowShortcut
+        onActivated: if (root.service) root.service.next()
+      }
+      Shortcut {
+        sequence: "Shift+Left"
+        context: Qt.WindowShortcut
+        onActivated: if (root.service) root.service.seekBy(-5000)
+      }
+      Shortcut {
+        sequence: "Shift+Right"
+        context: Qt.WindowShortcut
+        onActivated: if (root.service) root.service.seekBy(5000)
+      }
+      Shortcut {
+        sequence: "Ctrl+Up"
+        context: Qt.WindowShortcut
+        onActivated: if (root.service) root.service.volumeBy(0.05)
+      }
+      Shortcut {
+        sequence: "Ctrl+Down"
+        context: Qt.WindowShortcut
+        onActivated: if (root.service) root.service.volumeBy(-0.05)
+      }
+      Shortcut {
+        sequence: "M"
+        context: Qt.WindowShortcut
+        onActivated: if (root.service) root.service.toggleMute()
+      }
+      Shortcut {
+        sequence: "Ctrl+F"
+        context: Qt.WindowShortcut
+        onActivated: if (root.service) root.service.focusSearch()
+      }
+      Shortcut {
+        sequence: "Escape"
+        context: Qt.WindowShortcut
+        onActivated: root.requestClose()
       }
 
       Row {
