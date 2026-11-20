@@ -1,4 +1,5 @@
 mod paths;
+pub mod protocol;
 
 use anyhow::Result;
 use clap::Parser;
