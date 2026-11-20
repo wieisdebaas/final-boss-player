@@ -20,6 +20,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tokio::sync::oneshot;
 
+use crate::scan::TimedIo;
 use crate::state::{AppState, PlaybackUpdate};
 
 /// `previous` restarts the current track when it is further in than this.
@@ -27,6 +28,13 @@ const RESTART_THRESHOLD_MS: u64 = 3_000;
 const TICK: Duration = Duration::from_millis(100);
 const PUBLISH_INTERVAL: Duration = Duration::from_millis(1_000);
 const PERSIST_INTERVAL: Duration = Duration::from_secs(5);
+/// How long a caller waits for the playback thread to answer a command before
+/// reporting `player_busy` (the thread may be stuck on a stalled mount).
+pub const REPLY_TIMEOUT: Duration = Duration::from_secs(10);
+/// Longest a single open + probe of an audio file may take.
+const OPEN_TIMEOUT: Duration = Duration::from_secs(5);
+/// Threads that stalled opens may strand; further opens then fail fast.
+const OPEN_WORKERS: usize = 2;
 
 // ------------------------------------------------------------------ errors
 
@@ -261,17 +269,46 @@ pub struct RodioBackend {
     sink: Option<Sink>,
     volume: f32,
     base_ms: u64,
+    /// Bounded worker pool for the file open / probe / initial seek, which can
+    /// block indefinitely on a dead network mount.
+    io: TimedIo,
 }
 
 impl RodioBackend {
     pub fn new() -> Self {
+        Self::with_open_timeout(OPEN_TIMEOUT)
+    }
+
+    pub fn with_open_timeout(timeout: Duration) -> Self {
         Self {
             output: None,
             sink: None,
             volume: 1.0,
             base_ms: 0,
+            io: TimedIo::new(OPEN_WORKERS, timeout),
         }
     }
+}
+
+type OpenedTrack = (Decoder<BufReader<File>>, u64);
+
+/// Opens, probes and (optionally) seeks a file. Runs on a timed I/O worker.
+fn open_decoder(path: &Path, start_ms: u64) -> Result<OpenedTrack, PlayError> {
+    let file = File::open(path).map_err(|error| PlayError::file_unavailable(path, error))?;
+    let mut decoder = Decoder::new(BufReader::new(file)).map_err(|error| {
+        PlayError::new(
+            "decode_failed",
+            format!("could not decode {}: {error}", path.display()),
+        )
+    })?;
+    let mut base_ms = 0;
+    if start_ms > 0 {
+        match decoder.try_seek(Duration::from_millis(start_ms)) {
+            Ok(()) => base_ms = start_ms,
+            Err(error) => tracing::warn!(%error, "could not seek to start position"),
+        }
+    }
+    Ok((decoder, base_ms))
 }
 
 impl Default for RodioBackend {
@@ -284,20 +321,14 @@ impl Backend for RodioBackend {
     fn play(&mut self, path: &Path, start_ms: u64) -> Result<(), PlayError> {
         // Open and probe before touching the current sink, so a bad file does
         // not interrupt whatever is playing.
-        let file = File::open(path).map_err(|error| PlayError::file_unavailable(path, error))?;
-        let mut decoder = Decoder::new(BufReader::new(file)).map_err(|error| {
-            PlayError::new(
-                "decode_failed",
-                format!("could not decode {}: {error}", path.display()),
-            )
-        })?;
-        let mut base_ms = 0;
-        if start_ms > 0 {
-            match decoder.try_seek(Duration::from_millis(start_ms)) {
-                Ok(()) => base_ms = start_ms,
-                Err(error) => tracing::warn!(%error, "could not seek to start position"),
-            }
-        }
+        // The open runs on a timed worker: a stalled mount maps to
+        // `file_unavailable` (so auto-advance can skip it) instead of wedging
+        // the playback thread.
+        let owned = path.to_path_buf();
+        let (decoder, base_ms) = self
+            .io
+            .call(move || Ok(open_decoder(&owned, start_ms)))
+            .map_err(|error| PlayError::file_unavailable(path, error))??;
 
         self.stop();
         if self.output.is_none() {
@@ -717,6 +748,23 @@ impl Player {
             persist_path,
             restore,
         )
+    }
+
+    /// Like [`Player::send`], but gives up with `player_busy` when the playback
+    /// thread does not answer within [`REPLY_TIMEOUT`]. The command stays queued
+    /// and still runs if the thread recovers.
+    pub async fn send_timed(&self, cmd: Cmd) -> Result<(), PlayError> {
+        self.send_timeout(cmd, REPLY_TIMEOUT).await
+    }
+
+    pub async fn send_timeout(&self, cmd: Cmd, timeout: Duration) -> Result<(), PlayError> {
+        match tokio::time::timeout(timeout, self.send(cmd)).await {
+            Ok(result) => result,
+            Err(_) => Err(PlayError::new(
+                "player_busy",
+                "the player did not respond in time (is the music share unreachable?)",
+            )),
+        }
     }
 
     pub async fn send(&self, cmd: Cmd) -> Result<(), PlayError> {

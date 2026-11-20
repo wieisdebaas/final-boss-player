@@ -177,3 +177,52 @@ fn failed_remove_missing_rolls_back_all_deletes() {
     assert!(db.remove_missing_under(folder_id, &[]).is_err());
     assert_eq!(db.search("", 20, 0).unwrap().len(), 2);
 }
+
+#[test]
+fn ensure_folder_is_idempotent_and_keeps_scan_time() {
+    let temp = tempdir().unwrap();
+    let db = Db::open(temp.path().join("library.sqlite")).unwrap();
+
+    assert_eq!(db.folder_id("/music").unwrap(), None);
+    let first = db.ensure_folder("/music").unwrap();
+    db.mark_folder_scanned(first, 500).unwrap();
+    let second = db.ensure_folder("/music").unwrap();
+
+    assert_eq!(first, second);
+    assert_eq!(db.folder_id("/music").unwrap(), Some(first));
+    assert_eq!(db.list_folders().unwrap()[0].last_scan_at, Some(500));
+}
+
+#[test]
+fn concurrent_first_opens_all_migrate_safely() {
+    let temp = tempdir().unwrap();
+    let path = temp.path().join("library.sqlite");
+    let barrier = std::sync::Arc::new(std::sync::Barrier::new(8));
+    let handles: Vec<_> = (0..8)
+        .map(|_| {
+            let path = path.clone();
+            let barrier = barrier.clone();
+            std::thread::spawn(move || {
+                barrier.wait();
+                Db::open(&path).map(|db| db.user_version().unwrap())
+            })
+        })
+        .collect();
+
+    for handle in handles {
+        assert_eq!(handle.join().unwrap().unwrap(), 1);
+    }
+}
+
+#[test]
+fn open_enables_wal_journal_mode() {
+    let temp = tempdir().unwrap();
+    let path = temp.path().join("library.sqlite");
+    drop(Db::open(&path).unwrap());
+
+    let connection = Connection::open(path).unwrap();
+    let mode: String = connection
+        .query_row("PRAGMA journal_mode", [], |row| row.get(0))
+        .unwrap();
+    assert_eq!(mode, "wal");
+}

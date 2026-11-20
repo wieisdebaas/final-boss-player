@@ -141,7 +141,7 @@ impl Controls {
             Action::Nothing => Ok(()),
             Action::Send(cmd) => self
                 .player
-                .send(cmd)
+                .send_timed(cmd)
                 .await
                 .map_err(|error| fdo::Error::Failed(error.to_string())),
         }

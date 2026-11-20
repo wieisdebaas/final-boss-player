@@ -228,6 +228,144 @@ async fn remove_folder_waits_for_scan_and_leaves_no_trace() {
     task.abort();
 }
 
+struct TestServer {
+    socket_path: std::path::PathBuf,
+    db_path: std::path::PathBuf,
+    task: tokio::task::JoinHandle<anyhow::Result<()>>,
+}
+
+async fn start_server(temp: &std::path::Path) -> TestServer {
+    let socket_path = temp.join("backend.sock");
+    let db_path = temp.join("library.sqlite");
+    let (server_socket, server_db) = (socket_path.clone(), db_path.clone());
+    let task = tokio::spawn(async move {
+        server::run_with_db(&server_socket, server_db, state::AppState::new()).await
+    });
+    for _ in 0..500 {
+        if socket_path.exists() {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+    }
+    TestServer {
+        socket_path,
+        db_path,
+        task,
+    }
+}
+
+async fn call(
+    lines: &mut tokio::io::Lines<BufReader<tokio::net::unix::OwnedReadHalf>>,
+    writer: &mut tokio::net::unix::OwnedWriteHalf,
+    id: u64,
+    command: &str,
+    path: &std::path::Path,
+) -> serde_json::Value {
+    let line = format!(
+        "{{\"v\":1,\"id\":{id},\"cmd\":\"{command}\",\"path\":{}}}\n",
+        serde_json::to_string(&path.to_string_lossy()).unwrap()
+    );
+    writer.write_all(line.as_bytes()).await.unwrap();
+    loop {
+        let value: serde_json::Value =
+            serde_json::from_str(&lines.next_line().await.unwrap().unwrap()).unwrap();
+        if value["id"] == id {
+            return value;
+        }
+    }
+}
+
+async fn wait_for_stats(db_path: &std::path::Path, folders: i64, tracks: i64) -> db::LibraryStats {
+    let mut last = None;
+    for _ in 0..600 {
+        let stats = db::Db::open(db_path).unwrap().stats().unwrap();
+        let scanned = db::Db::open(db_path)
+            .unwrap()
+            .list_folders()
+            .unwrap()
+            .iter()
+            .all(|folder| folder.last_scan_at.is_some());
+        if stats.folders == folders && stats.tracks == tracks && scanned {
+            return stats;
+        }
+        last = Some(stats);
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    }
+    panic!("library never reached {folders} folders / {tracks} tracks; last: {last:?}");
+}
+
+fn music_folder(root: &std::path::Path, name: &str, files: usize) -> std::path::PathBuf {
+    let folder = root.join(name);
+    std::fs::create_dir(&folder).unwrap();
+    for index in 0..files {
+        write_wave(&folder.join(format!("{name} {index}.wav")));
+    }
+    folder
+}
+
+#[tokio::test]
+async fn back_to_back_adds_index_every_folder_completely() {
+    let temp = tempdir().unwrap();
+    let folders: Vec<_> = ["a", "b", "c"]
+        .iter()
+        .map(|name| music_folder(temp.path(), name, 25))
+        .collect();
+    let server = start_server(temp.path()).await;
+    let stream = UnixStream::connect(&server.socket_path).await.unwrap();
+    let (reader, mut writer) = stream.into_split();
+    let mut lines = BufReader::new(reader).lines();
+
+    // Each add is answered before the previous folder can finish scanning.
+    for (index, folder) in folders.iter().enumerate() {
+        let response = call(
+            &mut lines,
+            &mut writer,
+            index as u64 + 1,
+            "add_folder",
+            folder,
+        )
+        .await;
+        assert_eq!(response["ok"], true, "{response}");
+    }
+
+    // None of the folders may be dropped, and none may stay partially indexed.
+    wait_for_stats(&server.db_path, 3, 75).await;
+    server.task.abort();
+}
+
+#[tokio::test]
+async fn removing_a_folder_mid_scan_keeps_scanning_the_others() {
+    let temp = tempdir().unwrap();
+    let keep = music_folder(temp.path(), "keep", 40);
+    let drop_me = music_folder(temp.path(), "drop", 40);
+    let server = start_server(temp.path()).await;
+    let stream = UnixStream::connect(&server.socket_path).await.unwrap();
+    let (reader, mut writer) = stream.into_split();
+    let mut lines = BufReader::new(reader).lines();
+
+    let added = call(&mut lines, &mut writer, 1, "add_folder", &keep).await;
+    assert_eq!(added["ok"], true, "{added}");
+    let added = call(&mut lines, &mut writer, 2, "add_folder", &drop_me).await;
+    assert_eq!(added["ok"], true, "{added}");
+    // Removal cancels the scan that is (probably) indexing `keep`.
+    let removed = call(
+        &mut lines,
+        &mut writer,
+        3,
+        "remove_folder",
+        &drop_me.canonicalize().unwrap(),
+    )
+    .await;
+    assert_eq!(removed["ok"], true, "{removed}");
+
+    // The unrelated folder is fully indexed afterwards and the removed one stays gone.
+    wait_for_stats(&server.db_path, 1, 40).await;
+    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+    let stats = db::Db::open(&server.db_path).unwrap().stats().unwrap();
+    assert_eq!((stats.folders, stats.tracks), (1, 40));
+    server.task.abort();
+}
+
 fn write_wave(path: &std::path::Path) {
     let data = vec![128_u8; 8_000];
     let mut wave = Vec::with_capacity(44 + data.len());

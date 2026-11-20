@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 use std::path::Path;
 
-use rusqlite::{ffi, params, Connection, Result};
+use rusqlite::{ffi, params, Connection, Result, TransactionBehavior};
 use serde::Serialize;
 
 const SUPPORTED_SCHEMA_VERSION: i64 = 1;
@@ -133,10 +133,43 @@ pub struct LibraryStats {
 }
 
 impl Db {
+    /// Opens the database, migrating it if needed.
+    ///
+    /// Safe to call concurrently on a fresh database: the migration takes the
+    /// write lock up front (`BEGIN IMMEDIATE`) and re-reads `user_version`
+    /// inside the transaction, so losers of the race see the finished schema
+    /// instead of failing with "table already exists".
     pub fn open(path: impl AsRef<Path>) -> Result<Self> {
         let mut connection = Connection::open(path)?;
+        connection.busy_timeout(std::time::Duration::from_secs(10))?;
         connection.execute_batch("PRAGMA foreign_keys = ON;")?;
-        let version: i64 = connection.query_row("PRAGMA user_version", [], |row| row.get(0))?;
+        let version = Self::read_user_version(&connection)?;
+        Self::check_supported(version)?;
+        if version == 0 {
+            // WAL lets long scans write without blocking UI reads. It is
+            // persistent in the file, so this is a no-op after the first open.
+            // Not fatal: some filesystems cannot do WAL.
+            if let Err(error) = connection.query_row("PRAGMA journal_mode = WAL", [], |row| {
+                row.get::<_, String>(0)
+            }) {
+                tracing::warn!(%error, "could not enable WAL journal mode");
+            }
+            let migration = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
+            let version = Self::read_user_version(&migration)?;
+            Self::check_supported(version)?;
+            if version == 0 {
+                migration.execute_batch(VERSION_ONE_SCHEMA)?;
+            }
+            migration.commit()?;
+        }
+        Ok(Self { connection })
+    }
+
+    fn read_user_version(connection: &Connection) -> Result<i64> {
+        connection.query_row("PRAGMA user_version", [], |row| row.get(0))
+    }
+
+    fn check_supported(version: i64) -> Result<()> {
         if version > SUPPORTED_SCHEMA_VERSION {
             return Err(rusqlite::Error::SqliteFailure(
                 ffi::Error::new(ffi::SQLITE_ERROR),
@@ -145,12 +178,7 @@ impl Db {
                 )),
             ));
         }
-        if version == 0 {
-            let migration = connection.transaction()?;
-            migration.execute_batch(VERSION_ONE_SCHEMA)?;
-            migration.commit()?;
-        }
-        Ok(Self { connection })
+        Ok(())
     }
 
     pub fn user_version(&self) -> Result<i64> {
@@ -168,6 +196,29 @@ impl Db {
             .query_row("SELECT id FROM folders WHERE path = ?1", [path], |row| {
                 row.get(0)
             })
+    }
+
+    /// Inserts the folder if it is not indexed yet and returns its id,
+    /// leaving an existing row (and its `last_scan_at`) untouched.
+    pub fn ensure_folder(&self, path: &str) -> Result<i64> {
+        self.connection.execute(
+            "INSERT INTO folders(path, last_scan_at) VALUES (?1, NULL)
+             ON CONFLICT(path) DO NOTHING",
+            [path],
+        )?;
+        self.connection
+            .query_row("SELECT id FROM folders WHERE path = ?1", [path], |row| {
+                row.get(0)
+            })
+    }
+
+    /// Looks a folder up without creating it.
+    pub fn folder_id(&self, path: &str) -> Result<Option<i64>> {
+        let mut statement = self
+            .connection
+            .prepare("SELECT id FROM folders WHERE path = ?1")?;
+        let mut rows = statement.query([path])?;
+        rows.next()?.map(|row| row.get(0)).transpose()
     }
 
     pub fn list_folders(&self) -> Result<Vec<Folder>> {

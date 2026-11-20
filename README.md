@@ -71,6 +71,19 @@ cached art) / Position / Volume. Not supported: TrackList, Playlists, Raise/Quit
 writable Shuffle/LoopStatus/Volume, and the `Seeked` signal. If no session bus is
 available the daemon logs a warning and keeps running without MPRIS.
 
+## Known limitations
+
+- **Network shares (NAS).** Scanning, opening a track for playback, and reading
+  cover art all use time-limited I/O (5 s), so a dead mount reports
+  `file_unavailable` / `player_busy` instead of freezing the daemon or the shell.
+  A share that stalls *in the middle* of a stream is read inside the audio
+  callback and cannot be time-limited: expect audible dropouts until it recovers.
+- **Formats.** `.opus` files are indexed but cannot be played: the decoder
+  (rodio/symphonia) is built without Opus support, so playback fails with
+  `decode_failed`. ALAC in `.m4a` is not enabled either.
+- **Logs.** `endbossd` logs to stderr (`journalctl --user -u endbossd`); set
+  `RUST_LOG` (default `endbossd=info`) to change verbosity.
+
 ## Development
 
 ```sh

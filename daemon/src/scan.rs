@@ -261,7 +261,20 @@ pub fn run_with(
         return Ok(cancelled_result(0, 0, 0));
     }
     let folder_path = folder.to_string_lossy().into_owned();
-    let folder_id = db.upsert_folder(&folder_path, None)?;
+    // Scans only index folders that are already registered. Looking the folder
+    // up (never inserting) keeps a stale scan from resurrecting a folder that
+    // was removed in the meantime.
+    let Some(folder_id) = db.folder_id(&folder_path)? else {
+        tracing::info!(folder = %folder.display(), "folder is no longer registered; skipping scan");
+        return Ok(ScanResult {
+            scanned: 0,
+            indexed: 0,
+            unavailable: 0,
+            removed: 0,
+            cancelled: false,
+            discovery_complete: false,
+        });
+    };
 
     on_progress(ScanProgress {
         scanning: true,

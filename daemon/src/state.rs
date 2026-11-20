@@ -9,7 +9,11 @@ use crate::protocol::PlayerState;
 pub struct AppState {
     current: Arc<RwLock<PlayerState>>,
     changes: broadcast::Sender<PlayerState>,
+    /// Cancel flag of the newest scan task that has not finished yet.
     scan_cancel: Arc<Mutex<Option<Arc<AtomicBool>>>>,
+    /// A full rescan was requested and not yet carried out to completion. It
+    /// survives cancellation so a superseding scan inherits it.
+    full_scan_pending: Arc<AtomicBool>,
     /// Held for the whole lifetime of a scan task and by folder removal, so
     /// `remove_folder` can wait for a cancelled scan to stop writing.
     scan_gate: Arc<tokio::sync::Mutex<()>>,
@@ -22,6 +26,7 @@ impl AppState {
             current: Arc::new(RwLock::new(initial_player_state())),
             changes,
             scan_cancel: Arc::new(Mutex::new(None)),
+            full_scan_pending: Arc::new(AtomicBool::new(false)),
             scan_gate: Arc::new(tokio::sync::Mutex::new(())),
         }
     }
@@ -55,15 +60,44 @@ impl AppState {
         cancel
     }
 
-    pub fn cancel_scan(&self) {
-        if let Some(cancel) = self
+    /// Cancels the active scan, if any. Returns whether one was cancelled.
+    pub fn cancel_scan(&self) -> bool {
+        match self
             .scan_cancel
             .lock()
             .expect("scan cancellation lock was poisoned")
             .take()
         {
-            cancel.store(true, Ordering::Relaxed);
+            Some(cancel) => {
+                cancel.store(true, Ordering::Relaxed);
+                true
+            }
+            None => false,
         }
+    }
+
+    /// Marks a scan task as finished (no-op if a newer scan already replaced it).
+    pub fn end_scan(&self, cancel: &Arc<AtomicBool>) {
+        let mut active = self
+            .scan_cancel
+            .lock()
+            .expect("scan cancellation lock was poisoned");
+        if active
+            .as_ref()
+            .is_some_and(|current| Arc::ptr_eq(current, cancel))
+        {
+            *active = None;
+        }
+    }
+
+    pub fn request_full_scan(&self) {
+        self.full_scan_pending.store(true, Ordering::SeqCst);
+    }
+
+    /// Takes the pending full-scan request; the caller must re-request it if
+    /// it gets cancelled before finishing.
+    pub fn take_full_scan(&self) -> bool {
+        self.full_scan_pending.swap(false, Ordering::SeqCst)
     }
 
     pub async fn update_scan(&self, progress: crate::scan::ScanProgress) {

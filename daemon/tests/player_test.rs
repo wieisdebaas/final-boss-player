@@ -378,3 +378,87 @@ fn playback_persistence_round_trips_and_ignores_garbage() {
     std::fs::write(&path, b"not json").unwrap();
     assert_eq!(player::load_playback(&path), None);
 }
+
+// ------------------------------------------------- stalled-mount timeouts
+
+/// A backend whose `play` hangs until released, like `open` on a dead NFS mount.
+struct HangingBackend(Arc<Mutex<std::sync::mpsc::Receiver<()>>>);
+
+impl Backend for HangingBackend {
+    fn play(&mut self, _path: &Path, _start_ms: u64) -> Result<(), PlayError> {
+        let _ = self.0.lock().unwrap().recv();
+        Ok(())
+    }
+    fn pause(&mut self) {}
+    fn resume(&mut self) {}
+    fn stop(&mut self) {}
+    fn seek(&mut self, _position_ms: u64) -> Result<(), PlayError> {
+        Ok(())
+    }
+    fn set_volume(&mut self, _level: f32) {}
+    fn position_ms(&self) -> u64 {
+        0
+    }
+    fn finished(&self) -> bool {
+        false
+    }
+}
+
+#[tokio::test]
+async fn player_send_times_out_with_player_busy_when_the_thread_is_stuck() {
+    let (release, blocked) = std::sync::mpsc::channel::<()>();
+    let blocked = Arc::new(Mutex::new(blocked));
+    let player = player::Player::spawn(
+        move || Box::new(HangingBackend(blocked)),
+        state::AppState::new(),
+        tokio::runtime::Handle::current(),
+        None,
+        None,
+    );
+
+    let started = std::time::Instant::now();
+    let error = player
+        .send_timeout(
+            player::Cmd::PlayItems {
+                items: items(1),
+                start: 0,
+            },
+            std::time::Duration::from_millis(150),
+        )
+        .await
+        .unwrap_err();
+
+    assert_eq!(error.code, "player_busy");
+    assert!(started.elapsed() < std::time::Duration::from_secs(3));
+
+    // Once the mount "comes back" the player answers again.
+    drop(release);
+    player
+        .send_timeout(player::Cmd::Pause, std::time::Duration::from_secs(3))
+        .await
+        .unwrap();
+}
+
+#[test]
+fn rodio_open_of_a_stalled_file_maps_to_file_unavailable() {
+    // Opening a FIFO with no writer blocks forever, like a hard-mounted dead share.
+    let temp = tempdir().unwrap();
+    let fifo = temp.path().join("stalled.flac");
+    let c_path = std::ffi::CString::new(fifo.to_str().unwrap()).unwrap();
+    assert_eq!(unsafe { libc::mkfifo(c_path.as_ptr(), 0o600) }, 0);
+
+    let mut backend =
+        player::RodioBackend::with_open_timeout(std::time::Duration::from_millis(150));
+    let started = std::time::Instant::now();
+    let error = backend.play(&fifo, 0).unwrap_err();
+
+    assert_eq!(error.code, "file_unavailable");
+    assert!(started.elapsed() < std::time::Duration::from_secs(3));
+
+    // Release the stranded worker so the test process exits cleanly.
+    let _writer = std::fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open(&fifo)
+        .unwrap();
+}

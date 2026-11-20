@@ -23,6 +23,7 @@ struct Args {
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    init_logging();
     let args = Args::parse();
     let paths = Paths::from_env()?;
 
@@ -39,4 +40,20 @@ async fn main() -> Result<()> {
         AppState::new(),
     )
     .await
+}
+
+/// Logs to stderr (captured by journald under systemd). Filter with `RUST_LOG`,
+/// defaulting to `endbossd=info`. Colors only when stderr is a terminal.
+fn init_logging() {
+    use std::io::IsTerminal;
+    use tracing_subscriber::EnvFilter;
+
+    let filter =
+        EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("endbossd=info"));
+    let ansi = std::io::stderr().is_terminal();
+    tracing_subscriber::fmt()
+        .with_env_filter(filter)
+        .with_writer(std::io::stderr)
+        .with_ansi(ansi)
+        .init();
 }

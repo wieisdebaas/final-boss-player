@@ -3,7 +3,8 @@ use std::io::ErrorKind;
 use std::os::unix::fs::{FileTypeExt, PermissionsExt};
 use std::os::unix::net::UnixStream as StdUnixStream;
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use anyhow::{bail, Context, Result};
@@ -95,6 +96,18 @@ pub async fn run_with_paths(
     art_dir: PathBuf,
     state: AppState,
 ) -> Result<()> {
+    // Create and migrate the database once, before anything can race to do it.
+    // A broken or too-new database is a startup failure, not a per-request one.
+    let open_path = db_path.clone();
+    let folders = tokio::task::spawn_blocking(move || -> Result<Vec<String>> {
+        let db = crate::db::Db::open(&open_path)
+            .with_context(|| format!("could not open library database {}", open_path.display()))?;
+        Ok(db.list_folders()?.into_iter().map(|f| f.path).collect())
+    })
+    .await
+    .context("database startup task failed")??;
+    state.set_folders(folders).await;
+
     let state_dir = db_path.parent().map(Path::to_path_buf);
     let persist_path = state_dir.map(|dir| dir.join(PLAYBACK_FILE));
     let restore = persist_path
@@ -430,7 +443,7 @@ async fn playback(id: u64, context: &ServerContext, cmd: Cmd) -> ServerMessage {
     let Some(player) = &context.player else {
         return error_response(id, "unavailable", "playback is not configured");
     };
-    match player.send(cmd).await {
+    match player.send_timed(cmd).await {
         Ok(()) => ok_response(id, None),
         Err(error) => play_error_response(id, error),
     }
@@ -470,7 +483,7 @@ where
         Err(error) => return error_response(id, "internal_error", error.to_string()),
     };
     let items = tracks.iter().map(queue_item).collect();
-    match player.send(Cmd::PlayItems { items, start }).await {
+    match player.send_timed(Cmd::PlayItems { items, start }).await {
         Ok(()) => ok_response(id, None),
         Err(error) => play_error_response(id, error),
     }
@@ -499,7 +512,25 @@ async fn add_folder(id: u64, context: &ServerContext, path: String) -> ServerMes
         Err(_) => return error_response(id, "folder_timeout", "folder lookup timed out"),
     }
 
-    spawn_scans(db_path, context.state.clone(), vec![folder.clone()], false);
+    // Register the folder durably *before* answering, so it exists even if the
+    // scan that follows is superseded or cancelled.
+    let folder_path = folder.to_string_lossy().into_owned();
+    let registered = {
+        let db_path = db_path.clone();
+        tokio::task::spawn_blocking(move || -> Result<Vec<String>> {
+            let db = crate::db::Db::open(db_path)?;
+            db.ensure_folder(&folder_path)?;
+            Ok(db.list_folders()?.into_iter().map(|f| f.path).collect())
+        })
+        .await
+    };
+    match registered {
+        Ok(Ok(folders)) => context.state.set_folders(folders).await,
+        Ok(Err(error)) => return error_response(id, "database_error", error.to_string()),
+        Err(error) => return error_response(id, "internal_error", error.to_string()),
+    }
+
+    spawn_scans(db_path, context.state.clone(), false);
     ok_response(
         id,
         Some(json!({ "path": folder.to_string_lossy(), "scanning": true })),
@@ -514,13 +545,14 @@ async fn remove_folder(id: u64, context: &ServerContext, path: String) -> Server
     // holds it until it has stopped writing). Holding the gate ourselves keeps
     // a queued scan from starting until the folder is gone; a scan that was
     // cancelled before it started sees its flag and exits without touching the DB.
-    context.state.cancel_scan();
+    let cancelled_scan = context.state.cancel_scan();
     let _scan_gate = context.state.acquire_scan_gate().await;
     context.state.finish_scan().await;
+    let respawn_path = db_path.clone();
     let result = tokio::task::spawn_blocking(move || -> Result<_> {
         let db = crate::db::Db::open(db_path)?;
         let removed = db.remove_folder(&path)?;
-        let folders = db
+        let folders: Vec<String> = db
             .list_folders()?
             .into_iter()
             .map(|folder| folder.path)
@@ -531,7 +563,14 @@ async fn remove_folder(id: u64, context: &ServerContext, path: String) -> Server
 
     match result {
         Ok(Ok((removed, folders))) => {
+            let remaining = !folders.is_empty();
             context.state.set_folders(folders).await;
+            // The cancelled scan may have been indexing other folders; pick
+            // their work back up (incremental, so finished files are skipped).
+            // The new task queues behind `_scan_gate`, which we still hold.
+            if cancelled_scan && remaining {
+                spawn_scans(respawn_path, context.state.clone(), false);
+            }
             ok_response(id, Some(json!({ "removed": removed })))
         }
         Ok(Err(error)) => error_response(id, "database_error", error.to_string()),
@@ -556,7 +595,7 @@ async fn rescan(id: u64, context: &ServerContext, full: bool) -> ServerMessage {
     match folders {
         Ok(Ok(folders)) => {
             let count = folders.len();
-            spawn_scans(db_path, context.state.clone(), folders, full);
+            spawn_scans(db_path, context.state.clone(), full);
             ok_response(id, Some(json!({ "folders": count, "full": full })))
         }
         Ok(Err(error)) => error_response(id, "database_error", error.to_string()),
@@ -564,64 +603,136 @@ async fn rescan(id: u64, context: &ServerContext, full: bool) -> ServerMessage {
     }
 }
 
-fn spawn_scans(db_path: PathBuf, state: AppState, folders: Vec<PathBuf>, full: bool) {
+/// Ends the scan task's claim on the "active scan" slot, however it exits.
+struct ActiveScan {
+    state: AppState,
+    cancel: Arc<AtomicBool>,
+}
+
+impl Drop for ActiveScan {
+    fn drop(&mut self) {
+        self.state.end_scan(&self.cancel);
+    }
+}
+
+/// Queues a scan of *every registered folder*. The folder list is read when the
+/// task gets the scan gate, not when it is queued, so a scan that supersedes
+/// (cancels) an earlier one still covers the earlier one's remaining work and
+/// any folder added in between. Incremental mode skips unchanged files.
+fn spawn_scans(db_path: PathBuf, state: AppState, full: bool) {
+    if full {
+        state.request_full_scan();
+    }
     let cancel = state.begin_scan();
     tokio::spawn(async move {
         let _scan_gate = state.acquire_scan_gate().await;
-        if cancel.load(std::sync::atomic::Ordering::Relaxed) {
+        let _active = ActiveScan {
+            state: state.clone(),
+            cancel: cancel.clone(),
+        };
+        if cancel.load(Ordering::Relaxed) {
             return;
         }
-        if folders.is_empty() {
-            state
-                .update_scan(scan::ScanProgress {
-                    scanning: false,
-                    scanned: 0,
-                    total: 0,
-                })
-                .await;
-        }
-        for folder in folders {
-            if cancel.load(std::sync::atomic::Ordering::Relaxed) {
-                break;
-            }
-            let scan_path = db_path.clone();
-            let scan_state = state.clone();
-            let scan_cancel = cancel.clone();
-            let runtime = tokio::runtime::Handle::current();
-            let result = tokio::task::spawn_blocking(move || -> Result<_> {
-                let db = crate::db::Db::open(scan_path)?;
-                scan::run(db, &folder, full, scan_cancel, move |progress| {
-                    // Synchronous so no progress update can land after the scan
-                    // (and its gate) has finished.
-                    runtime.block_on(scan_state.update_scan(progress));
-                })
-            })
-            .await;
-
-            match result
-                .map_err(anyhow::Error::from)
-                .and_then(|result| result)
-            {
-                Ok(result) if result.cancelled => break,
-                Ok(_) => {}
-                Err(error) => {
-                    if cancel.load(std::sync::atomic::Ordering::Relaxed) {
-                        return;
-                    }
-                    state.set_scan_error(error.to_string()).await;
-                    return;
-                }
-            }
-        }
-
-        if let Ok(db) = crate::db::Db::open(&db_path) {
-            if let Ok(folders) = db.list_folders() {
-                state
-                    .set_folders(folders.into_iter().map(|folder| folder.path).collect())
-                    .await;
-            }
+        let full = state.take_full_scan();
+        let cancelled = run_scan_task(&db_path, &state, &cancel, full).await;
+        if cancelled && full {
+            // Cancelled before finishing: whoever scans next must stay full.
+            state.request_full_scan();
         }
     });
+}
+
+/// Scans all registered folders. Returns `true` if it was cancelled.
+async fn run_scan_task(
+    db_path: &Path,
+    state: &AppState,
+    cancel: &Arc<AtomicBool>,
+    full: bool,
+) -> bool {
+    let list_path = db_path.to_path_buf();
+    let listed = tokio::task::spawn_blocking(move || -> Result<Vec<PathBuf>> {
+        Ok(crate::db::Db::open(list_path)?
+            .list_folders()?
+            .into_iter()
+            .map(|folder| PathBuf::from(folder.path))
+            .collect())
+    })
+    .await
+    .map_err(anyhow::Error::from)
+    .and_then(|listed| listed);
+    let folders = match listed {
+        Ok(folders) => folders,
+        Err(error) => {
+            state.set_scan_error(error.to_string()).await;
+            return false;
+        }
+    };
+
+    if folders.is_empty() {
+        state
+            .update_scan(scan::ScanProgress {
+                scanning: false,
+                scanned: 0,
+                total: 0,
+            })
+            .await;
+    }
+    let mut first_error = None;
+    let mut cancelled = false;
+    for folder in folders {
+        if cancel.load(Ordering::Relaxed) {
+            cancelled = true;
+            break;
+        }
+        let scan_path = db_path.to_path_buf();
+        let scan_state = state.clone();
+        let scan_cancel = cancel.clone();
+        let runtime = tokio::runtime::Handle::current();
+        let result = tokio::task::spawn_blocking(move || -> Result<_> {
+            let db = crate::db::Db::open(scan_path)?;
+            scan::run(db, &folder, full, scan_cancel, move |progress| {
+                // Synchronous so no progress update can land after the scan
+                // (and its gate) has finished.
+                runtime.block_on(scan_state.update_scan(progress));
+            })
+        })
+        .await;
+
+        match result
+            .map_err(anyhow::Error::from)
+            .and_then(|result| result)
+        {
+            Ok(result) if result.cancelled => {
+                cancelled = true;
+                break;
+            }
+            Ok(_) => {}
+            Err(error) => {
+                if cancel.load(Ordering::Relaxed) {
+                    cancelled = true;
+                    break;
+                }
+                // One bad folder must not stop the others from being scanned.
+                tracing::warn!(%error, "folder scan failed");
+                first_error.get_or_insert_with(|| error.to_string());
+            }
+        }
+    }
+
+    if let Ok(Ok(folders)) = tokio::task::spawn_blocking({
+        let db_path = db_path.to_path_buf();
+        move || crate::db::Db::open(db_path).and_then(|db| db.list_folders())
+    })
+    .await
+    {
+        state
+            .set_folders(folders.into_iter().map(|folder| folder.path).collect())
+            .await;
+    }
+    if let Some(message) = first_error {
+        state.set_scan_error(message).await;
+    }
+    cancelled
 }
 
 fn ok_response(id: u64, result: Option<Value>) -> ServerMessage {

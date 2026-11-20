@@ -71,9 +71,11 @@ fn scans_a_wave_file_into_sqlite_and_reports_progress() {
     write_wave(&music.join("Boss Theme.wav"));
     let db_path = temp.path().join("library.sqlite");
     let mut progress = Vec::new();
+    let db = Db::open(&db_path).unwrap();
+    db.ensure_folder(&music.to_string_lossy()).unwrap();
 
     let result = scan::run(
-        Db::open(&db_path).unwrap(),
+        db,
         &music,
         false,
         Arc::new(AtomicBool::new(false)),
@@ -116,6 +118,30 @@ fn cancelled_scan_does_not_recreate_folder_or_touch_db() {
 }
 
 #[test]
+fn scan_skips_unregistered_folder_without_creating_it() {
+    let temp = tempdir().unwrap();
+    let music = temp.path().join("music");
+    std::fs::create_dir(&music).unwrap();
+    write_wave(&music.join("Boss Theme.wav"));
+    let db_path = temp.path().join("library.sqlite");
+
+    // Not cancelled, but never registered (e.g. removed while the scan was queued).
+    let result = scan::run(
+        Db::open(&db_path).unwrap(),
+        &music,
+        false,
+        Arc::new(AtomicBool::new(false)),
+        |_| {},
+    )
+    .unwrap();
+
+    assert_eq!(result.indexed, 0);
+    let db = Db::open(db_path).unwrap();
+    assert!(db.list_folders().unwrap().is_empty());
+    assert_eq!(db.stats().unwrap().tracks, 0);
+}
+
+#[test]
 fn incomplete_traversal_never_prunes_indexed_tracks() {
     let temp = tempdir().unwrap();
     let music = temp.path().join("music");
@@ -125,6 +151,10 @@ fn incomplete_traversal_never_prunes_indexed_tracks() {
     write_wave(&flaky.join("Kept Nested.wav"));
     let db_path = temp.path().join("library.sqlite");
     let io = scan::TimedIo::new(2, Duration::from_millis(200));
+    Db::open(&db_path)
+        .unwrap()
+        .ensure_folder(&music.to_string_lossy())
+        .unwrap();
 
     // First, a complete scan indexes both files.
     let first = scan::run_with(
