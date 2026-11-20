@@ -1,3 +1,4 @@
+pub mod db;
 mod paths;
 pub mod protocol;
 

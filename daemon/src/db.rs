@@ -1,0 +1,429 @@
+use std::collections::HashSet;
+use std::path::Path;
+
+use rusqlite::{params, Connection, Result};
+
+pub struct Db {
+    connection: Connection,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Folder {
+    pub id: i64,
+    pub path: String,
+    pub last_scan_at: Option<i64>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TrackInput {
+    pub folder_id: i64,
+    pub path: String,
+    pub size: i64,
+    pub mtime: i64,
+    pub title: String,
+    pub artist: Option<String>,
+    pub album_artist: Option<String>,
+    pub album: Option<String>,
+    pub track_no: Option<i64>,
+    pub disc_no: Option<i64>,
+    pub year: Option<i64>,
+    pub genre: Option<String>,
+    pub duration_ms: i64,
+    pub has_art: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Track {
+    pub id: i64,
+    pub folder_id: i64,
+    pub path: String,
+    pub size: i64,
+    pub mtime: i64,
+    pub title: String,
+    pub artist: Option<String>,
+    pub album_artist: Option<String>,
+    pub album: Option<String>,
+    pub track_no: Option<i64>,
+    pub disc_no: Option<i64>,
+    pub year: Option<i64>,
+    pub genre: Option<String>,
+    pub duration_ms: i64,
+    pub has_art: bool,
+    pub added_at: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Album {
+    pub id: i64,
+    pub name: String,
+    pub album_artist: Option<String>,
+    pub year: Option<i64>,
+    pub track_count: i64,
+    pub has_art: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Artist {
+    pub id: i64,
+    pub name: String,
+    pub album_count: i64,
+    pub track_count: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LibraryStats {
+    pub folders: i64,
+    pub tracks: i64,
+    pub albums: i64,
+    pub artists: i64,
+    pub plays: i64,
+}
+
+impl Db {
+    pub fn open(path: impl AsRef<Path>) -> Result<Self> {
+        let connection = Connection::open(path)?;
+        connection.execute_batch(
+            "
+            PRAGMA foreign_keys = ON;
+            CREATE TABLE IF NOT EXISTS folders (
+                id INTEGER PRIMARY KEY,
+                path TEXT NOT NULL UNIQUE,
+                last_scan_at INTEGER
+            );
+            CREATE TABLE IF NOT EXISTS artists (
+                id INTEGER PRIMARY KEY,
+                name TEXT NOT NULL UNIQUE
+            );
+            CREATE TABLE IF NOT EXISTS albums (
+                id INTEGER PRIMARY KEY,
+                name TEXT NOT NULL,
+                album_artist TEXT NOT NULL DEFAULT '',
+                year INTEGER,
+                UNIQUE(name, album_artist)
+            );
+            CREATE TABLE IF NOT EXISTS tracks (
+                id INTEGER PRIMARY KEY,
+                folder_id INTEGER NOT NULL REFERENCES folders(id) ON DELETE CASCADE,
+                artist_id INTEGER REFERENCES artists(id),
+                album_id INTEGER REFERENCES albums(id),
+                path TEXT NOT NULL UNIQUE,
+                size INTEGER NOT NULL,
+                mtime INTEGER NOT NULL,
+                title TEXT NOT NULL,
+                artist TEXT,
+                album_artist TEXT,
+                album TEXT,
+                track_no INTEGER,
+                disc_no INTEGER,
+                year INTEGER,
+                genre TEXT,
+                duration_ms INTEGER NOT NULL,
+                has_art INTEGER NOT NULL DEFAULT 0,
+                added_at INTEGER NOT NULL DEFAULT (unixepoch())
+            );
+            CREATE INDEX IF NOT EXISTS tracks_folder_id_idx ON tracks(folder_id);
+            CREATE INDEX IF NOT EXISTS tracks_artist_id_idx ON tracks(artist_id);
+            CREATE INDEX IF NOT EXISTS tracks_album_id_idx ON tracks(album_id);
+            CREATE INDEX IF NOT EXISTS tracks_title_idx ON tracks(title);
+            CREATE TABLE IF NOT EXISTS plays (
+                id INTEGER PRIMARY KEY,
+                track_id INTEGER NOT NULL REFERENCES tracks(id) ON DELETE CASCADE,
+                played_at INTEGER NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS plays_track_id_idx ON plays(track_id);
+            PRAGMA user_version = 1;
+            ",
+        )?;
+        Ok(Self { connection })
+    }
+
+    pub fn user_version(&self) -> Result<i64> {
+        self.connection
+            .query_row("PRAGMA user_version", [], |row| row.get(0))
+    }
+
+    pub fn upsert_folder(&self, path: &str, last_scan_at: Option<i64>) -> Result<i64> {
+        self.connection.execute(
+            "INSERT INTO folders(path, last_scan_at) VALUES (?1, ?2)
+             ON CONFLICT(path) DO UPDATE SET last_scan_at = excluded.last_scan_at",
+            params![path, last_scan_at],
+        )?;
+        self.connection
+            .query_row("SELECT id FROM folders WHERE path = ?1", [path], |row| {
+                row.get(0)
+            })
+    }
+
+    pub fn list_folders(&self) -> Result<Vec<Folder>> {
+        let mut statement = self
+            .connection
+            .prepare("SELECT id, path, last_scan_at FROM folders ORDER BY path")?;
+        let folders = statement
+            .query_map([], |row| {
+                Ok(Folder {
+                    id: row.get(0)?,
+                    path: row.get(1)?,
+                    last_scan_at: row.get(2)?,
+                })
+            })?
+            .collect();
+        folders
+    }
+
+    pub fn upsert_track(&self, track: &TrackInput) -> Result<i64> {
+        let artist_id = track
+            .artist
+            .as_deref()
+            .filter(|name| !name.is_empty())
+            .map(|name| self.upsert_artist(name))
+            .transpose()?;
+        let album_id = track
+            .album
+            .as_deref()
+            .filter(|name| !name.is_empty())
+            .map(|name| self.upsert_album(name, track.album_artist.as_deref(), track.year))
+            .transpose()?;
+
+        self.connection.execute(
+            "INSERT INTO tracks (
+                folder_id, artist_id, album_id, path, size, mtime, title, artist,
+                album_artist, album, track_no, disc_no, year, genre, duration_ms, has_art
+             ) VALUES (
+                ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16
+             )
+             ON CONFLICT(path) DO UPDATE SET
+                folder_id = excluded.folder_id,
+                artist_id = excluded.artist_id,
+                album_id = excluded.album_id,
+                size = excluded.size,
+                mtime = excluded.mtime,
+                title = excluded.title,
+                artist = excluded.artist,
+                album_artist = excluded.album_artist,
+                album = excluded.album,
+                track_no = excluded.track_no,
+                disc_no = excluded.disc_no,
+                year = excluded.year,
+                genre = excluded.genre,
+                duration_ms = excluded.duration_ms,
+                has_art = excluded.has_art",
+            params![
+                track.folder_id,
+                artist_id,
+                album_id,
+                track.path,
+                track.size,
+                track.mtime,
+                track.title,
+                track.artist,
+                track.album_artist,
+                track.album,
+                track.track_no,
+                track.disc_no,
+                track.year,
+                track.genre,
+                track.duration_ms,
+                track.has_art,
+            ],
+        )?;
+        let id = self.connection.query_row(
+            "SELECT id FROM tracks WHERE path = ?1",
+            [&track.path],
+            |row| row.get(0),
+        )?;
+        self.cleanup_orphans()?;
+        Ok(id)
+    }
+
+    pub fn remove_missing_under(&self, folder_id: i64, present_paths: &[String]) -> Result<usize> {
+        let present: HashSet<&str> = present_paths.iter().map(String::as_str).collect();
+        let mut statement = self
+            .connection
+            .prepare("SELECT id, path FROM tracks WHERE folder_id = ?1")?;
+        let candidates: Vec<(i64, String)> = statement
+            .query_map([folder_id], |row| Ok((row.get(0)?, row.get(1)?)))?
+            .collect::<Result<_>>()?;
+        let mut removed = 0;
+        for (id, path) in candidates {
+            if !present.contains(path.as_str()) {
+                removed += self
+                    .connection
+                    .execute("DELETE FROM tracks WHERE id = ?1", [id])?;
+            }
+        }
+        self.cleanup_orphans()?;
+        Ok(removed)
+    }
+
+    pub fn search(&self, query: &str, limit: u32, offset: u32) -> Result<Vec<Track>> {
+        let pattern = format!("%{query}%");
+        let mut statement = self.connection.prepare(
+            "SELECT id, folder_id, path, size, mtime, title, artist, album_artist,
+                    album, track_no, disc_no, year, genre, duration_ms, has_art, added_at
+             FROM tracks
+             WHERE title LIKE ?1 OR artist LIKE ?1 OR album_artist LIKE ?1 OR album LIKE ?1
+             ORDER BY title COLLATE NOCASE, id
+             LIMIT ?2 OFFSET ?3",
+        )?;
+        let tracks = statement
+            .query_map(params![pattern, limit, offset], map_track)?
+            .collect();
+        tracks
+    }
+
+    pub fn list_albums(&self, limit: u32, offset: u32) -> Result<Vec<Album>> {
+        let mut statement = self.connection.prepare(
+            "SELECT a.id, a.name, NULLIF(a.album_artist, ''), a.year,
+                    COUNT(t.id), COALESCE(MAX(t.has_art), 0)
+             FROM albums a
+             JOIN tracks t ON t.album_id = a.id
+             GROUP BY a.id
+             ORDER BY a.name COLLATE NOCASE, a.album_artist COLLATE NOCASE
+             LIMIT ?1 OFFSET ?2",
+        )?;
+        let albums = statement
+            .query_map(params![limit, offset], |row| {
+                Ok(Album {
+                    id: row.get(0)?,
+                    name: row.get(1)?,
+                    album_artist: row.get(2)?,
+                    year: row.get(3)?,
+                    track_count: row.get(4)?,
+                    has_art: row.get::<_, i64>(5)? != 0,
+                })
+            })?
+            .collect();
+        albums
+    }
+
+    pub fn list_artists(&self, limit: u32, offset: u32) -> Result<Vec<Artist>> {
+        let mut statement = self.connection.prepare(
+            "SELECT a.id, a.name, COUNT(DISTINCT t.album_id), COUNT(t.id)
+             FROM artists a
+             JOIN tracks t ON t.artist_id = a.id
+             GROUP BY a.id
+             ORDER BY a.name COLLATE NOCASE
+             LIMIT ?1 OFFSET ?2",
+        )?;
+        let artists = statement
+            .query_map(params![limit, offset], |row| {
+                Ok(Artist {
+                    id: row.get(0)?,
+                    name: row.get(1)?,
+                    album_count: row.get(2)?,
+                    track_count: row.get(3)?,
+                })
+            })?
+            .collect();
+        artists
+    }
+
+    pub fn album_tracks(&self, album_id: i64) -> Result<Vec<Track>> {
+        let mut statement = self.connection.prepare(
+            "SELECT id, folder_id, path, size, mtime, title, artist, album_artist,
+                    album, track_no, disc_no, year, genre, duration_ms, has_art, added_at
+             FROM tracks
+             WHERE album_id = ?1
+             ORDER BY COALESCE(disc_no, 1), COALESCE(track_no, 2147483647),
+                      title COLLATE NOCASE, id",
+        )?;
+        let tracks = statement.query_map([album_id], map_track)?.collect();
+        tracks
+    }
+
+    pub fn stats(&self) -> Result<LibraryStats> {
+        self.connection.query_row(
+            "SELECT
+                (SELECT COUNT(*) FROM folders),
+                (SELECT COUNT(*) FROM tracks),
+                (SELECT COUNT(*) FROM albums),
+                (SELECT COUNT(*) FROM artists),
+                (SELECT COUNT(*) FROM plays)",
+            [],
+            |row| {
+                Ok(LibraryStats {
+                    folders: row.get(0)?,
+                    tracks: row.get(1)?,
+                    albums: row.get(2)?,
+                    artists: row.get(3)?,
+                    plays: row.get(4)?,
+                })
+            },
+        )
+    }
+
+    pub fn record_play(&self, track_id: i64, played_at: i64) -> Result<i64> {
+        self.connection.execute(
+            "INSERT INTO plays(track_id, played_at) VALUES (?1, ?2)",
+            params![track_id, played_at],
+        )?;
+        Ok(self.connection.last_insert_rowid())
+    }
+
+    fn upsert_artist(&self, name: &str) -> Result<i64> {
+        self.connection.execute(
+            "INSERT INTO artists(name) VALUES (?1) ON CONFLICT(name) DO NOTHING",
+            [name],
+        )?;
+        self.connection
+            .query_row("SELECT id FROM artists WHERE name = ?1", [name], |row| {
+                row.get(0)
+            })
+    }
+
+    fn upsert_album(
+        &self,
+        name: &str,
+        album_artist: Option<&str>,
+        year: Option<i64>,
+    ) -> Result<i64> {
+        let album_artist = album_artist.unwrap_or("");
+        self.connection.execute(
+            "INSERT INTO albums(name, album_artist, year) VALUES (?1, ?2, ?3)
+             ON CONFLICT(name, album_artist) DO UPDATE SET year = excluded.year",
+            params![name, album_artist, year],
+        )?;
+        self.connection.query_row(
+            "SELECT id FROM albums WHERE name = ?1 AND album_artist = ?2",
+            params![name, album_artist],
+            |row| row.get(0),
+        )
+    }
+
+    fn cleanup_orphans(&self) -> Result<()> {
+        self.connection.execute(
+            "DELETE FROM albums WHERE NOT EXISTS (
+                SELECT 1 FROM tracks WHERE tracks.album_id = albums.id
+            )",
+            [],
+        )?;
+        self.connection.execute(
+            "DELETE FROM artists WHERE NOT EXISTS (
+                SELECT 1 FROM tracks WHERE tracks.artist_id = artists.id
+            )",
+            [],
+        )?;
+        Ok(())
+    }
+}
+
+fn map_track(row: &rusqlite::Row<'_>) -> Result<Track> {
+    Ok(Track {
+        id: row.get(0)?,
+        folder_id: row.get(1)?,
+        path: row.get(2)?,
+        size: row.get(3)?,
+        mtime: row.get(4)?,
+        title: row.get(5)?,
+        artist: row.get(6)?,
+        album_artist: row.get(7)?,
+        album: row.get(8)?,
+        track_no: row.get(9)?,
+        disc_no: row.get(10)?,
+        year: row.get(11)?,
+        genre: row.get(12)?,
+        duration_ms: row.get(13)?,
+        has_art: row.get::<_, i64>(14)? != 0,
+        added_at: row.get(15)?,
+    })
+}
