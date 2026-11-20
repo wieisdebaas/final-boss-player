@@ -4,6 +4,9 @@ mod db;
 #[allow(dead_code)]
 #[path = "../src/meta.rs"]
 mod meta;
+#[allow(dead_code)]
+#[path = "../src/player.rs"]
+mod player;
 #[path = "../src/protocol.rs"]
 mod protocol;
 #[allow(dead_code)]
@@ -140,7 +143,7 @@ async fn rejects_unsupported_commands() {
     lines.next_line().await.unwrap().unwrap();
 
     writer
-        .write_all(b"{\"v\":1,\"id\":9,\"cmd\":\"pause\"}\n")
+        .write_all(b"{\"v\":1,\"id\":9,\"cmd\":\"get_art\",\"album_id\":1}\n")
         .await
         .unwrap();
     let response: serde_json::Value =

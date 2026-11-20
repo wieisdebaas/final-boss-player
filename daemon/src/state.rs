@@ -106,6 +106,49 @@ impl AppState {
     }
 }
 
+/// Playback fields the player engine owns inside the shared snapshot.
+#[derive(Debug, Clone, PartialEq)]
+pub struct PlaybackUpdate {
+    pub track: Option<serde_json::Value>,
+    pub playing: bool,
+    pub position_ms: u64,
+    pub duration_ms: Option<u64>,
+    pub volume: f32,
+    pub shuffle: bool,
+    pub repeat: String,
+    pub error_code: Option<String>,
+    pub error_message: Option<String>,
+}
+
+impl PlaybackUpdate {
+    /// Equality that ignores the (continuously advancing) position.
+    pub fn same_except_position(&self, other: &Self) -> bool {
+        let mut other = other.clone();
+        other.position_ms = self.position_ms;
+        *self == other
+    }
+}
+
+impl AppState {
+    pub async fn apply_playback(&self, update: PlaybackUpdate) {
+        let mut snapshot = self.current.write().await;
+        snapshot.track = update.track;
+        snapshot.playing = update.playing;
+        snapshot.position_ms = update.position_ms;
+        snapshot.duration_ms = update.duration_ms;
+        snapshot.volume = update.volume;
+        snapshot.shuffle = update.shuffle;
+        snapshot.repeat = update.repeat;
+        // Playback must not clear a scan failure, but owns its own errors.
+        if update.error_code.is_some() || snapshot.error_code.as_deref() != Some("scan_failed") {
+            snapshot.error_code = update.error_code;
+            snapshot.error_message = update.error_message;
+        }
+        snapshot.generation += 1;
+        let _ = self.changes.send(snapshot.clone());
+    }
+}
+
 impl Default for AppState {
     fn default() -> Self {
         Self::new()

@@ -382,6 +382,35 @@ impl Db {
         tracks
     }
 
+    /// Play queue for a single track: its album in album order and the
+    /// track's index within it, or just the track when it has no album.
+    pub fn queue_for_track(&self, track_id: i64) -> Result<Option<(Vec<Track>, usize)>> {
+        let album_id = match self.connection.query_row(
+            "SELECT album_id FROM tracks WHERE id = ?1",
+            [track_id],
+            |row| row.get::<_, Option<i64>>(0),
+        ) {
+            Ok(album_id) => album_id,
+            Err(rusqlite::Error::QueryReturnedNoRows) => return Ok(None),
+            Err(error) => return Err(error),
+        };
+        if let Some(album_id) = album_id {
+            let tracks = self.album_tracks(album_id)?;
+            if let Some(index) = tracks.iter().position(|track| track.id == track_id) {
+                return Ok(Some((tracks, index)));
+            }
+        }
+        let mut statement = self.connection.prepare(
+            "SELECT id, folder_id, path, size, mtime, title, artist, album_artist,
+                    album, track_no, disc_no, year, genre, duration_ms, has_art, added_at
+             FROM tracks WHERE id = ?1",
+        )?;
+        let tracks: Vec<Track> = statement
+            .query_map([track_id], map_track)?
+            .collect::<Result<_>>()?;
+        Ok(Some((tracks, 0)))
+    }
+
     pub fn stats(&self) -> Result<LibraryStats> {
         self.connection.query_row(
             "SELECT

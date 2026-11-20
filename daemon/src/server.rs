@@ -12,6 +12,7 @@ use tokio::io::{AsyncBufReadExt, AsyncWrite, AsyncWriteExt, BufReader};
 use tokio::net::{UnixListener, UnixStream};
 use tokio::sync::broadcast;
 
+use crate::player::{self, Cmd, PlayError, Player, QueueItem, Restore};
 use crate::protocol::{
     parse_client_message, Command, ProtocolError, ServerMessage, PROTOCOL_VERSION,
 };
@@ -75,22 +76,94 @@ pub async fn run(socket_path: &Path, state: AppState) -> Result<()> {
 }
 
 pub async fn serve(listener: UnixListener, state: AppState) -> Result<()> {
-    serve_context(listener, ServerContext::new(state, None)).await
+    serve_context(listener, ServerContext::new(state, None, None)).await
 }
 
+/// Serves with the real audio engine. Playback position is persisted next to
+/// the database in the state directory.
 pub async fn run_with_db(socket_path: &Path, db_path: PathBuf, state: AppState) -> Result<()> {
-    serve_context(bind(socket_path)?, ServerContext::new(state, Some(db_path))).await
+    let state_dir = db_path.parent().map(Path::to_path_buf);
+    let persist_path = state_dir.map(|dir| dir.join(PLAYBACK_FILE));
+    let restore = persist_path
+        .as_deref()
+        .and_then(|path| load_restore(&db_path, path));
+    let player = Player::spawn_audio(
+        state.clone(),
+        tokio::runtime::Handle::current(),
+        persist_path,
+        restore,
+    );
+    let listener = bind(socket_path)?;
+    serve_context(
+        listener,
+        ServerContext::new(state, Some(db_path), Some(player)),
+    )
+    .await
+}
+
+/// Serves with a caller-supplied player (used with a fake audio backend).
+pub async fn serve_with_player(
+    listener: UnixListener,
+    state: AppState,
+    db_path: PathBuf,
+    player: Player,
+) -> Result<()> {
+    serve_context(
+        listener,
+        ServerContext::new(state, Some(db_path), Some(player)),
+    )
+    .await
+}
+
+pub const PLAYBACK_FILE: &str = "playback.json";
+
+/// Rebuilds the last queue (the track's album) paused at the saved position.
+pub fn load_restore(db_path: &Path, playback_path: &Path) -> Option<Restore> {
+    let saved = player::load_playback(playback_path)?;
+    let db = crate::db::Db::open(db_path).ok()?;
+    let (tracks, start) = db.queue_for_track(saved.track_id).ok()??;
+    Some(Restore {
+        items: tracks.iter().map(queue_item).collect(),
+        start,
+        position_ms: saved.position_ms,
+    })
+}
+
+fn queue_item(track: &crate::db::Track) -> QueueItem {
+    QueueItem {
+        id: track.id,
+        path: PathBuf::from(&track.path),
+        duration_ms: u64::try_from(track.duration_ms).unwrap_or(0),
+        meta: json!({
+            "id": track.id,
+            "title": track.title,
+            "artist": track.artist,
+            "album_artist": track.album_artist,
+            "album": track.album,
+            "track_no": track.track_no,
+            "disc_no": track.disc_no,
+            "year": track.year,
+            "genre": track.genre,
+            "duration_ms": track.duration_ms,
+            "has_art": track.has_art,
+        }),
+    }
 }
 
 #[derive(Clone)]
 struct ServerContext {
     state: AppState,
     db_path: Option<PathBuf>,
+    player: Option<Player>,
 }
 
 impl ServerContext {
-    fn new(state: AppState, db_path: Option<PathBuf>) -> Self {
-        Self { state, db_path }
+    fn new(state: AppState, db_path: Option<PathBuf>, player: Option<Player>) -> Self {
+        Self {
+            state,
+            db_path,
+            player,
+        }
     }
 }
 
@@ -175,7 +248,24 @@ async fn dispatch(line: &str, context: &ServerContext) -> ServerMessage {
 
     if !matches!(
         command,
-        Some("hello" | "ping" | "get_state" | "add_folder" | "remove_folder" | "rescan")
+        Some(
+            "hello"
+                | "ping"
+                | "get_state"
+                | "add_folder"
+                | "remove_folder"
+                | "rescan"
+                | "play"
+                | "play_album"
+                | "pause"
+                | "toggle"
+                | "next"
+                | "previous"
+                | "seek"
+                | "set_volume"
+                | "set_shuffle"
+                | "set_repeat"
+        )
     ) {
         return error_response(id, "unknown_command", "command is not supported");
     }
@@ -198,8 +288,76 @@ async fn dispatch(line: &str, context: &ServerContext) -> ServerMessage {
         Command::AddFolder { path } => add_folder(request.id, context, path).await,
         Command::RemoveFolder { path } => remove_folder(request.id, context, path).await,
         Command::Rescan { full } => rescan(request.id, context, full).await,
+        Command::Play { track_id } => play_track(request.id, context, track_id).await,
+        Command::PlayAlbum { album_id } => play_album(request.id, context, album_id).await,
+        Command::Pause => playback(request.id, context, Cmd::Pause).await,
+        Command::Toggle => playback(request.id, context, Cmd::Toggle).await,
+        Command::Next => playback(request.id, context, Cmd::Next).await,
+        Command::Previous => playback(request.id, context, Cmd::Previous).await,
+        Command::Seek { position_ms } => {
+            playback(request.id, context, Cmd::Seek(position_ms)).await
+        }
+        Command::SetVolume { level } => playback(request.id, context, Cmd::SetVolume(level)).await,
+        Command::SetShuffle { enabled } => {
+            playback(request.id, context, Cmd::SetShuffle(enabled)).await
+        }
+        Command::SetRepeat { mode } => playback(request.id, context, Cmd::SetRepeat(mode)).await,
         _ => error_response(request.id, "unknown_command", "command is not supported"),
     }
+}
+
+async fn playback(id: u64, context: &ServerContext, cmd: Cmd) -> ServerMessage {
+    let Some(player) = &context.player else {
+        return error_response(id, "unavailable", "playback is not configured");
+    };
+    match player.send(cmd).await {
+        Ok(()) => ok_response(id, None),
+        Err(error) => play_error_response(id, error),
+    }
+}
+
+async fn play_track(id: u64, context: &ServerContext, track_id: i64) -> ServerMessage {
+    play_queue(id, context, move |db| db.queue_for_track(track_id)).await
+}
+
+async fn play_album(id: u64, context: &ServerContext, album_id: i64) -> ServerMessage {
+    play_queue(id, context, move |db| {
+        let tracks = db.album_tracks(album_id)?;
+        Ok((!tracks.is_empty()).then_some((tracks, 0)))
+    })
+    .await
+}
+
+/// Resolves a queue from the library, then hands it to the player.
+async fn play_queue<F>(id: u64, context: &ServerContext, resolve: F) -> ServerMessage
+where
+    F: FnOnce(&crate::db::Db) -> rusqlite::Result<Option<(Vec<crate::db::Track>, usize)>>
+        + Send
+        + 'static,
+{
+    let (Some(db_path), Some(player)) = (context.db_path.clone(), &context.player) else {
+        return error_response(id, "unavailable", "playback is not configured");
+    };
+    let resolved = tokio::task::spawn_blocking(move || -> Result<_> {
+        let db = crate::db::Db::open(db_path)?;
+        Ok(resolve(&db)?)
+    })
+    .await;
+    let (tracks, start) = match resolved {
+        Ok(Ok(Some(queue))) => queue,
+        Ok(Ok(None)) => return error_response(id, "not_found", "no such track or album"),
+        Ok(Err(error)) => return error_response(id, "database_error", error.to_string()),
+        Err(error) => return error_response(id, "internal_error", error.to_string()),
+    };
+    let items = tracks.iter().map(queue_item).collect();
+    match player.send(Cmd::PlayItems { items, start }).await {
+        Ok(()) => ok_response(id, None),
+        Err(error) => play_error_response(id, error),
+    }
+}
+
+fn play_error_response(id: u64, error: PlayError) -> ServerMessage {
+    error_response(id, &error.code, error.message)
 }
 
 async fn add_folder(id: u64, context: &ServerContext, path: String) -> ServerMessage {

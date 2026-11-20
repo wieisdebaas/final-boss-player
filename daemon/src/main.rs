@@ -1,6 +1,7 @@
 pub mod db;
 pub mod meta;
 mod paths;
+pub mod player;
 pub mod protocol;
 pub mod scan;
 pub mod server;
