@@ -1,7 +1,58 @@
 use std::collections::HashSet;
 use std::path::Path;
 
-use rusqlite::{params, Connection, Result};
+use rusqlite::{ffi, params, Connection, Result};
+
+const SUPPORTED_SCHEMA_VERSION: i64 = 1;
+const VERSION_ONE_SCHEMA: &str = "
+    CREATE TABLE folders (
+        id INTEGER PRIMARY KEY,
+        path TEXT NOT NULL UNIQUE,
+        last_scan_at INTEGER
+    );
+    CREATE TABLE artists (
+        id INTEGER PRIMARY KEY,
+        name TEXT NOT NULL UNIQUE
+    );
+    CREATE TABLE albums (
+        id INTEGER PRIMARY KEY,
+        name TEXT NOT NULL,
+        album_artist TEXT NOT NULL DEFAULT '',
+        year INTEGER,
+        UNIQUE(name, album_artist)
+    );
+    CREATE TABLE tracks (
+        id INTEGER PRIMARY KEY,
+        folder_id INTEGER NOT NULL REFERENCES folders(id) ON DELETE CASCADE,
+        artist_id INTEGER REFERENCES artists(id),
+        album_id INTEGER REFERENCES albums(id),
+        path TEXT NOT NULL UNIQUE,
+        size INTEGER NOT NULL,
+        mtime INTEGER NOT NULL,
+        title TEXT NOT NULL,
+        artist TEXT,
+        album_artist TEXT,
+        album TEXT,
+        track_no INTEGER,
+        disc_no INTEGER,
+        year INTEGER,
+        genre TEXT,
+        duration_ms INTEGER NOT NULL,
+        has_art INTEGER NOT NULL DEFAULT 0,
+        added_at INTEGER NOT NULL DEFAULT (unixepoch())
+    );
+    CREATE INDEX tracks_folder_id_idx ON tracks(folder_id);
+    CREATE INDEX tracks_artist_id_idx ON tracks(artist_id);
+    CREATE INDEX tracks_album_id_idx ON tracks(album_id);
+    CREATE INDEX tracks_title_idx ON tracks(title);
+    CREATE TABLE plays (
+        id INTEGER PRIMARY KEY,
+        track_id INTEGER NOT NULL REFERENCES tracks(id) ON DELETE CASCADE,
+        played_at INTEGER NOT NULL
+    );
+    CREATE INDEX plays_track_id_idx ON plays(track_id);
+    PRAGMA user_version = 1;
+";
 
 pub struct Db {
     connection: Connection,
@@ -81,59 +132,22 @@ pub struct LibraryStats {
 
 impl Db {
     pub fn open(path: impl AsRef<Path>) -> Result<Self> {
-        let connection = Connection::open(path)?;
-        connection.execute_batch(
-            "
-            PRAGMA foreign_keys = ON;
-            CREATE TABLE IF NOT EXISTS folders (
-                id INTEGER PRIMARY KEY,
-                path TEXT NOT NULL UNIQUE,
-                last_scan_at INTEGER
-            );
-            CREATE TABLE IF NOT EXISTS artists (
-                id INTEGER PRIMARY KEY,
-                name TEXT NOT NULL UNIQUE
-            );
-            CREATE TABLE IF NOT EXISTS albums (
-                id INTEGER PRIMARY KEY,
-                name TEXT NOT NULL,
-                album_artist TEXT NOT NULL DEFAULT '',
-                year INTEGER,
-                UNIQUE(name, album_artist)
-            );
-            CREATE TABLE IF NOT EXISTS tracks (
-                id INTEGER PRIMARY KEY,
-                folder_id INTEGER NOT NULL REFERENCES folders(id) ON DELETE CASCADE,
-                artist_id INTEGER REFERENCES artists(id),
-                album_id INTEGER REFERENCES albums(id),
-                path TEXT NOT NULL UNIQUE,
-                size INTEGER NOT NULL,
-                mtime INTEGER NOT NULL,
-                title TEXT NOT NULL,
-                artist TEXT,
-                album_artist TEXT,
-                album TEXT,
-                track_no INTEGER,
-                disc_no INTEGER,
-                year INTEGER,
-                genre TEXT,
-                duration_ms INTEGER NOT NULL,
-                has_art INTEGER NOT NULL DEFAULT 0,
-                added_at INTEGER NOT NULL DEFAULT (unixepoch())
-            );
-            CREATE INDEX IF NOT EXISTS tracks_folder_id_idx ON tracks(folder_id);
-            CREATE INDEX IF NOT EXISTS tracks_artist_id_idx ON tracks(artist_id);
-            CREATE INDEX IF NOT EXISTS tracks_album_id_idx ON tracks(album_id);
-            CREATE INDEX IF NOT EXISTS tracks_title_idx ON tracks(title);
-            CREATE TABLE IF NOT EXISTS plays (
-                id INTEGER PRIMARY KEY,
-                track_id INTEGER NOT NULL REFERENCES tracks(id) ON DELETE CASCADE,
-                played_at INTEGER NOT NULL
-            );
-            CREATE INDEX IF NOT EXISTS plays_track_id_idx ON plays(track_id);
-            PRAGMA user_version = 1;
-            ",
-        )?;
+        let mut connection = Connection::open(path)?;
+        connection.execute_batch("PRAGMA foreign_keys = ON;")?;
+        let version: i64 = connection.query_row("PRAGMA user_version", [], |row| row.get(0))?;
+        if version > SUPPORTED_SCHEMA_VERSION {
+            return Err(rusqlite::Error::SqliteFailure(
+                ffi::Error::new(ffi::SQLITE_ERROR),
+                Some(format!(
+                    "database schema version {version} is newer than supported version {SUPPORTED_SCHEMA_VERSION}"
+                )),
+            ));
+        }
+        if version == 0 {
+            let migration = connection.transaction()?;
+            migration.execute_batch(VERSION_ONE_SCHEMA)?;
+            migration.commit()?;
+        }
         Ok(Self { connection })
     }
 
@@ -171,20 +185,28 @@ impl Db {
     }
 
     pub fn upsert_track(&self, track: &TrackInput) -> Result<i64> {
+        let transaction = self.connection.unchecked_transaction()?;
         let artist_id = track
             .artist
             .as_deref()
             .filter(|name| !name.is_empty())
-            .map(|name| self.upsert_artist(name))
+            .map(|name| Self::upsert_artist(&transaction, name))
             .transpose()?;
         let album_id = track
             .album
             .as_deref()
             .filter(|name| !name.is_empty())
-            .map(|name| self.upsert_album(name, track.album_artist.as_deref(), track.year))
+            .map(|name| {
+                Self::upsert_album(
+                    &transaction,
+                    name,
+                    track.album_artist.as_deref(),
+                    track.year,
+                )
+            })
             .transpose()?;
 
-        self.connection.execute(
+        transaction.execute(
             "INSERT INTO tracks (
                 folder_id, artist_id, album_id, path, size, mtime, title, artist,
                 album_artist, album, track_no, disc_no, year, genre, duration_ms, has_art
@@ -226,32 +248,35 @@ impl Db {
                 track.has_art,
             ],
         )?;
-        let id = self.connection.query_row(
+        let id = transaction.query_row(
             "SELECT id FROM tracks WHERE path = ?1",
             [&track.path],
             |row| row.get(0),
         )?;
-        self.cleanup_orphans()?;
+        Self::cleanup_orphans(&transaction)?;
+        transaction.commit()?;
         Ok(id)
     }
 
     pub fn remove_missing_under(&self, folder_id: i64, present_paths: &[String]) -> Result<usize> {
+        let transaction = self.connection.unchecked_transaction()?;
         let present: HashSet<&str> = present_paths.iter().map(String::as_str).collect();
-        let mut statement = self
-            .connection
-            .prepare("SELECT id, path FROM tracks WHERE folder_id = ?1")?;
-        let candidates: Vec<(i64, String)> = statement
-            .query_map([folder_id], |row| Ok((row.get(0)?, row.get(1)?)))?
-            .collect::<Result<_>>()?;
+        let candidates: Vec<(i64, String)> = {
+            let mut statement =
+                transaction.prepare("SELECT id, path FROM tracks WHERE folder_id = ?1")?;
+            let candidates = statement
+                .query_map([folder_id], |row| Ok((row.get(0)?, row.get(1)?)))?
+                .collect::<Result<_>>()?;
+            candidates
+        };
         let mut removed = 0;
         for (id, path) in candidates {
             if !present.contains(path.as_str()) {
-                removed += self
-                    .connection
-                    .execute("DELETE FROM tracks WHERE id = ?1", [id])?;
+                removed += transaction.execute("DELETE FROM tracks WHERE id = ?1", [id])?;
             }
         }
-        self.cleanup_orphans()?;
+        Self::cleanup_orphans(&transaction)?;
+        transaction.commit()?;
         Ok(removed)
     }
 
@@ -360,44 +385,43 @@ impl Db {
         Ok(self.connection.last_insert_rowid())
     }
 
-    fn upsert_artist(&self, name: &str) -> Result<i64> {
-        self.connection.execute(
+    fn upsert_artist(connection: &Connection, name: &str) -> Result<i64> {
+        connection.execute(
             "INSERT INTO artists(name) VALUES (?1) ON CONFLICT(name) DO NOTHING",
             [name],
         )?;
-        self.connection
-            .query_row("SELECT id FROM artists WHERE name = ?1", [name], |row| {
-                row.get(0)
-            })
+        connection.query_row("SELECT id FROM artists WHERE name = ?1", [name], |row| {
+            row.get(0)
+        })
     }
 
     fn upsert_album(
-        &self,
+        connection: &Connection,
         name: &str,
         album_artist: Option<&str>,
         year: Option<i64>,
     ) -> Result<i64> {
         let album_artist = album_artist.unwrap_or("");
-        self.connection.execute(
+        connection.execute(
             "INSERT INTO albums(name, album_artist, year) VALUES (?1, ?2, ?3)
              ON CONFLICT(name, album_artist) DO UPDATE SET year = excluded.year",
             params![name, album_artist, year],
         )?;
-        self.connection.query_row(
+        connection.query_row(
             "SELECT id FROM albums WHERE name = ?1 AND album_artist = ?2",
             params![name, album_artist],
             |row| row.get(0),
         )
     }
 
-    fn cleanup_orphans(&self) -> Result<()> {
-        self.connection.execute(
+    fn cleanup_orphans(connection: &Connection) -> Result<()> {
+        connection.execute(
             "DELETE FROM albums WHERE NOT EXISTS (
                 SELECT 1 FROM tracks WHERE tracks.album_id = albums.id
             )",
             [],
         )?;
-        self.connection.execute(
+        connection.execute(
             "DELETE FROM artists WHERE NOT EXISTS (
                 SELECT 1 FROM tracks WHERE tracks.artist_id = artists.id
             )",
