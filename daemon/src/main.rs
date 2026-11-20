@@ -1,10 +1,13 @@
 pub mod db;
 mod paths;
 pub mod protocol;
+pub mod server;
+pub mod state;
 
 use anyhow::Result;
 use clap::Parser;
 use paths::Paths;
+use state::AppState;
 
 #[derive(Debug, Parser)]
 #[command(name = "endbossd")]
@@ -13,7 +16,8 @@ struct Args {
     print_paths: bool,
 }
 
-fn main() -> Result<()> {
+#[tokio::main]
+async fn main() -> Result<()> {
     let args = Args::parse();
     let paths = Paths::from_env()?;
 
@@ -22,5 +26,6 @@ fn main() -> Result<()> {
         return Ok(());
     }
 
-    paths.ensure()
+    paths.ensure()?;
+    server::run(&paths.socket_path, AppState::new()).await
 }
