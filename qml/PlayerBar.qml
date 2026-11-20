@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import qs.Commons
+import qs.Ui
 
 // Bottom transport bar. Pure view over Service.playerState.
 Rectangle {
@@ -8,12 +9,21 @@ Rectangle {
 
   property var service: null
 
+  property string artPath: ""
+  property int artAlbumId: -1
+
   readonly property var snapshot: service ? service.playerState : null
   readonly property real positionMs: snapshot ? Number(snapshot.position_ms) || 0 : 0
   readonly property real durationMs: snapshot && snapshot.duration_ms ? Number(snapshot.duration_ms) : 0
   readonly property real progress: durationMs > 0
     ? Math.max(0, Math.min(1, positionMs / durationMs)) : 0
+  readonly property real volume: snapshot ? Math.max(0, Math.min(1, Number(snapshot.volume))) : 0
+  readonly property var trackInfo: service ? service.track : null
+  readonly property int albumId: trackInfo && trackInfo.album_id !== undefined && trackInfo.album_id !== null
+    ? Number(trackInfo.album_id) : -1
+  readonly property bool trackHasArt: !!trackInfo && trackInfo.has_art === true && albumId >= 0
 
+  // Keep the footer height fixed; art fits inside this.
   implicitHeight: 72
   color: Qt.darker(Color.background, 1.15)
 
@@ -24,6 +34,44 @@ Rectangle {
     return minutes + ":" + (seconds < 10 ? "0" : "") + seconds
   }
 
+  function volumeGlyph() {
+    if (root.volume <= 0.001) return "\u{1F507}"
+    if (root.volume < 0.34) return "\u{1F508}"
+    if (root.volume < 0.67) return "\u{1F509}"
+    return "\u{1F50A}"
+  }
+
+  function refreshArt() {
+    if (!root.service || !root.service.connected || !root.trackHasArt) {
+      artPath = ""
+      artAlbumId = -1
+      return
+    }
+    if (albumId === artAlbumId) return
+    var requested = albumId
+    artAlbumId = requested
+    artPath = ""
+    root.service.request("get_art", { album_id: requested }, function(ok, result) {
+      if (requested !== root.artAlbumId) return
+      root.artPath = ok && result && result.path ? String(result.path) : ""
+    })
+  }
+
+  onAlbumIdChanged: refreshArt()
+  onTrackHasArtChanged: refreshArt()
+  Connections {
+    target: root.service
+    function onConnectedChanged() {
+      if (!root.service || !root.service.connected) {
+        root.artPath = ""
+        root.artAlbumId = -1
+      } else {
+        root.refreshArt()
+      }
+    }
+  }
+  Component.onCompleted: refreshArt()
+
   Rectangle {
     anchors.top: parent.top
     anchors.left: parent.left
@@ -33,12 +81,40 @@ Rectangle {
   }
 
   Row {
+    id: nowPlaying
     anchors.left: parent.left
-    anchors.leftMargin: 16
+    anchors.leftMargin: 12
     anchors.verticalCenter: parent.verticalCenter
-    width: 240
+    spacing: 10
+    width: Math.min(280, parent.width * 0.32)
+
+    Rectangle {
+      width: 48
+      height: 48
+      radius: 4
+      anchors.verticalCenter: parent.verticalCenter
+      color: Qt.rgba(Color.foreground.r, Color.foreground.g, Color.foreground.b, 0.08)
+      clip: true
+
+      SizedImage {
+        anchors.fill: parent
+        crop: true
+        url: root.artPath !== "" ? "file://" + root.artPath : ""
+        visible: url != ""
+      }
+
+      Text {
+        anchors.centerIn: parent
+        visible: root.artPath === ""
+        color: Color.muted
+        font.pixelSize: 18
+        text: "\u266A"
+      }
+    }
+
     Column {
-      width: parent.width
+      anchors.verticalCenter: parent.verticalCenter
+      width: parent.width - 58
       spacing: 2
       Text {
         width: parent.width
@@ -68,14 +144,17 @@ Rectangle {
       spacing: 20
       Repeater {
         model: [
-          { glyph: "\u23EE", action: "previous" },
-          { glyph: root.service && root.service.playing ? "\u23F8" : "\u25B6", action: "toggle" },
-          { glyph: "\u23ED", action: "next" }
+          { glyph: "\u23EE", action: "previous", accent: false },
+          { glyph: root.service && root.service.playing ? "\u23F8" : "\u25B6", action: "toggle", accent: false },
+          { glyph: "\u23ED", action: "next", accent: false },
+          { glyph: "\u21C4", action: "toggleShuffle", accent: true }
         ]
         delegate: Text {
           id: transport
           required property var modelData
-          color: Color.foreground
+          color: modelData.accent && root.service && root.service.shuffle
+            ? Color.accent
+            : Color.foreground
           font.pixelSize: 20
           opacity: root.service && root.service.connected ? 1 : 0.4
           text: modelData.glyph
@@ -134,12 +213,21 @@ Rectangle {
     anchors.rightMargin: 16
     anchors.verticalCenter: parent.verticalCenter
     spacing: 8
+
     Text {
       anchors.verticalCenter: parent.verticalCenter
       color: Color.muted
-      font.pixelSize: 12
-      text: "vol"
+      font.pixelSize: 16
+      opacity: root.service && root.service.connected ? 1 : 0.4
+      text: root.volumeGlyph()
+      MouseArea {
+        anchors.fill: parent
+        anchors.margins: -4
+        cursorShape: Qt.PointingHandCursor
+        onClicked: if (root.service) root.service.toggleMute()
+      }
     }
+
     Rectangle {
       id: volumeTrack
       width: 100
@@ -148,7 +236,7 @@ Rectangle {
       anchors.verticalCenter: parent.verticalCenter
       color: Qt.rgba(Color.foreground.r, Color.foreground.g, Color.foreground.b, 0.18)
       Rectangle {
-        width: parent.width * (root.snapshot ? Math.max(0, Math.min(1, Number(root.snapshot.volume))) : 0)
+        width: parent.width * root.volume
         height: parent.height
         radius: 2
         color: Color.accent

@@ -5,6 +5,8 @@ Rust daemon. It streams from your music folders (including NAS mounts) with no
 copying, keeps a SQLite index, and exposes media keys over MPRIS. The plugin id
 is `io.github.endboss.player`.
 
+**User guide:** [docs/MANUAL.md](docs/MANUAL.md)
+
 ## Install
 
 ```sh
@@ -48,6 +50,10 @@ scripts/dev-link.sh        # symlink the plugin only (--unlink to remove)
 | `Esc`        | Close the popup                |
 
 The popup shows cover art, title, artist, progress, and previous / play / next.
+
+The full player’s bottom bar also has **shuffle** (⇄). When enabled, upcoming tracks play in random order after the current song.
+
+Clicking a track in Library / search / album lists starts it; clicking the **currently loaded** track toggles play / pause.
 
 ## Panel shortcuts
 

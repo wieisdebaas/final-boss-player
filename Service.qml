@@ -48,6 +48,7 @@ Item {
   property var playerState: emptyState
   readonly property bool connected: backend.connected
   readonly property bool playing: playerState.playing === true
+  readonly property bool shuffle: playerState.shuffle === true
   readonly property var track: playerState.track || null
   readonly property string title: track && track.title ? String(track.title) : ""
   readonly property string artist: track && track.artist ? String(track.artist) : ""
@@ -144,6 +145,16 @@ Item {
   function play(trackId, callback) {
     return request("play", { track_id: trackId }, callback)
   }
+  // Library rows: same track toggles play/pause; a different track starts it.
+  function playOrToggle(trackId, callback) {
+    var id = Number(trackId)
+    if (track && Number(track.id) === id) {
+      toggle()
+      if (typeof callback === "function") callback(true, null, null)
+      return true
+    }
+    return play(id, callback)
+  }
   function playAlbum(albumId, callback) {
     return request("play_album", { album_id: albumId }, callback)
   }
@@ -172,6 +183,9 @@ Item {
   }
   function setShuffle(enabled) {
     return request("set_shuffle", { enabled: enabled === true }, null)
+  }
+  function toggleShuffle() {
+    return setShuffle(!shuffle)
   }
   function setRepeat(mode) {
     return request("set_repeat", { mode: String(mode || "off") }, null)

@@ -2,7 +2,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import qs.Commons
 
-// Reusable track rows. Clicking a row plays that track via Service.play().
+// Reusable track rows. Click plays a track; clicking the current one toggles pause.
 ListView {
   id: root
 
@@ -51,8 +51,10 @@ ListView {
         font.pixelSize: 12
         visible: root.showNumbers
         text: row.isCurrent && root.service && root.service.playing
-          ? "\u25B6"
-          : String(row.modelData.track_no > 0 ? row.modelData.track_no : row.index + 1)
+          ? "\u23F8"
+          : row.isCurrent
+            ? "\u25B6"
+            : String(row.modelData.track_no > 0 ? row.modelData.track_no : row.index + 1)
       }
 
       Column {
@@ -91,7 +93,7 @@ ListView {
       anchors.fill: parent
       hoverEnabled: true
       cursorShape: Qt.PointingHandCursor
-      onClicked: if (root.service) root.service.play(Number(row.modelData.id), null)
+      onClicked: if (root.service) root.service.playOrToggle(Number(row.modelData.id), null)
     }
   }
 

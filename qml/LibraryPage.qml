@@ -104,7 +104,10 @@ Item {
           color: row.isCurrent ? Color.accent : Color.muted
           font.pixelSize: 12
           text: row.isCurrent && root.service && root.service.playing
-            ? "\u25B6" : String(row.index + 1)
+            ? "\u23F8"
+            : row.isCurrent
+              ? "\u25B6"
+              : String(row.index + 1)
         }
 
         Column {
@@ -143,7 +146,7 @@ Item {
         anchors.fill: parent
         hoverEnabled: true
         cursorShape: Qt.PointingHandCursor
-        onClicked: if (root.service) root.service.play(Number(row.modelData.id), null)
+        onClicked: if (root.service) root.service.playOrToggle(Number(row.modelData.id), null)
       }
     }
   }
