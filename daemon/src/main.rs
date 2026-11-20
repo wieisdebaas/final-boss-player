@@ -1,6 +1,8 @@
 pub mod db;
+pub mod meta;
 mod paths;
 pub mod protocol;
+pub mod scan;
 pub mod server;
 pub mod state;
 
@@ -27,5 +29,5 @@ async fn main() -> Result<()> {
     }
 
     paths.ensure()?;
-    server::run(&paths.socket_path, AppState::new()).await
+    server::run_with_db(&paths.socket_path, paths.db_path, AppState::new()).await
 }

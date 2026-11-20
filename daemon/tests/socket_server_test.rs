@@ -1,5 +1,14 @@
+#[allow(dead_code)]
+#[path = "../src/db.rs"]
+mod db;
+#[allow(dead_code)]
+#[path = "../src/meta.rs"]
+mod meta;
 #[path = "../src/protocol.rs"]
 mod protocol;
+#[allow(dead_code)]
+#[path = "../src/scan.rs"]
+mod scan;
 #[allow(dead_code)]
 #[path = "../src/server.rs"]
 mod server;

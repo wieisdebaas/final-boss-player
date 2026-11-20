@@ -184,6 +184,32 @@ impl Db {
         folders
     }
 
+    pub fn remove_folder(&self, path: &str) -> Result<bool> {
+        let transaction = self.connection.unchecked_transaction()?;
+        let removed = transaction.execute("DELETE FROM folders WHERE path = ?1", [path])? != 0;
+        Self::cleanup_orphans(&transaction)?;
+        transaction.commit()?;
+        Ok(removed)
+    }
+
+    pub fn track_stamp(&self, path: &str) -> Result<Option<(i64, i64)>> {
+        let mut statement = self
+            .connection
+            .prepare("SELECT size, mtime FROM tracks WHERE path = ?1")?;
+        let mut rows = statement.query([path])?;
+        rows.next()?
+            .map(|row| Ok((row.get(0)?, row.get(1)?)))
+            .transpose()
+    }
+
+    pub fn mark_folder_scanned(&self, folder_id: i64, scanned_at: i64) -> Result<()> {
+        self.connection.execute(
+            "UPDATE folders SET last_scan_at = ?1 WHERE id = ?2",
+            params![scanned_at, folder_id],
+        )?;
+        Ok(())
+    }
+
     pub fn upsert_track(&self, track: &TrackInput) -> Result<i64> {
         let transaction = self.connection.unchecked_transaction()?;
         let artist_id = track
