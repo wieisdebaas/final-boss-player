@@ -18,8 +18,15 @@ Item {
   readonly property string pluginId: manifest && manifest.id
     ? String(manifest.id) : "io.github.endboss.player"
 
-  readonly property var pages: ["library", "settings"]
-  property string currentPage: "library"
+  readonly property var pages: ["home", "search", "library", "artists", "albums", "settings"]
+  property string currentPage: "home"
+
+  // Drill-down selection for the albums/artists pages (null = show the list).
+  property var selectedAlbum: null
+  property var selectedArtist: null
+  // Search state lives here so Ctrl+F can focus it from anywhere.
+  property string searchQuery: ""
+  property int searchFocusRequest: 0
 
   readonly property var emptyState: ({
     lifecycle: "disconnected",
@@ -59,8 +66,52 @@ Item {
   function navigate(page) {
     var next = String(page || "")
     if (pages.indexOf(next) < 0) return false
+    // Re-selecting a sidebar entry returns to its top-level list.
+    selectedAlbum = null
+    selectedArtist = null
     currentPage = next
     return true
+  }
+
+  function openAlbum(album) {
+    selectedAlbum = album || null
+    currentPage = "albums"
+  }
+
+  function openArtist(artist) {
+    selectedArtist = artist || null
+    currentPage = "artists"
+  }
+
+  function focusSearch() {
+    currentPage = "search"
+    searchFocusRequest++
+  }
+
+  // Relative controls used by keyboard shortcuts.
+  function seekBy(deltaMs) {
+    if (!connected || !hasMedia) return
+    var duration = Number(playerState.duration_ms) || 0
+    var target = (Number(playerState.position_ms) || 0) + deltaMs
+    if (duration > 0) target = Math.min(target, duration)
+    seek(target)
+  }
+
+  function volumeBy(delta) {
+    if (!connected) return
+    setVolume((Number(playerState.volume) || 0) + delta)
+  }
+
+  property real volumeBeforeMute: 0.8
+  function toggleMute() {
+    if (!connected) return
+    var current = Number(playerState.volume) || 0
+    if (current > 0) {
+      volumeBeforeMute = current
+      setVolume(0)
+    } else {
+      setVolume(volumeBeforeMute > 0 ? volumeBeforeMute : 0.8)
+    }
   }
 
   function setUiVisible(visible) {

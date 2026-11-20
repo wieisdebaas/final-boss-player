@@ -5,7 +5,7 @@ import qs.Commons
 
 import "qml"
 
-// Full player window: sidebar (Library, Settings) + page stack + PlayerBar.
+// Full player window: sidebar + page stack + PlayerBar + keyboard shortcuts.
 // All state lives in Service.qml; the host injects `service`.
 Item {
   id: root
@@ -18,10 +18,14 @@ Item {
 
   readonly property string pluginId: manifest && manifest.id
     ? String(manifest.id) : "io.github.endboss.player"
-  readonly property string currentPage: service ? service.currentPage : "library"
+  readonly property string currentPage: service ? service.currentPage : "home"
 
   readonly property var sidebarItems: [
+    { page: "home", label: "Home" },
+    { page: "search", label: "Search" },
     { page: "library", label: "Library" },
+    { page: "artists", label: "Artists" },
+    { page: "albums", label: "Albums" },
     { page: "settings", label: "Settings" }
   ]
 
@@ -67,7 +71,36 @@ Item {
       id: focusScope
       anchors.fill: parent
       focus: true
-      Keys.onEscapePressed: root.requestClose()
+
+      // Return keyboard focus to the scope when leaving the search field.
+      Connections {
+        target: root
+        function onCurrentPageChanged() {
+          if (root.currentPage !== "search") focusScope.forceActiveFocus()
+        }
+      }
+
+      // Text inputs accept the keys they consume (space, M, Ctrl+Left, ...)
+      // before they reach this handler, so typing in search is unaffected.
+      Keys.onPressed: function(event) {
+        var svc = root.service
+        if (!svc) return
+        var ctrl = (event.modifiers & Qt.ControlModifier) !== 0
+        var shift = (event.modifiers & Qt.ShiftModifier) !== 0
+        var plain = event.modifiers === Qt.NoModifier
+        event.accepted = true
+        if (event.key === Qt.Key_Escape) root.requestClose()
+        else if (event.key === Qt.Key_Space && plain) svc.toggle()
+        else if (event.key === Qt.Key_M && plain) svc.toggleMute()
+        else if (event.key === Qt.Key_F && ctrl) svc.focusSearch()
+        else if (event.key === Qt.Key_Right && ctrl) svc.next()
+        else if (event.key === Qt.Key_Left && ctrl) svc.previous()
+        else if (event.key === Qt.Key_Right && shift) svc.seekBy(5000)
+        else if (event.key === Qt.Key_Left && shift) svc.seekBy(-5000)
+        else if (event.key === Qt.Key_Up && ctrl) svc.volumeBy(0.05)
+        else if (event.key === Qt.Key_Down && ctrl) svc.volumeBy(-0.05)
+        else event.accepted = false
+      }
 
       Row {
         id: body
@@ -133,9 +166,29 @@ Item {
           width: parent.width - sidebar.width
           height: parent.height
 
+          HomePage {
+            anchors.fill: parent
+            visible: root.currentPage === "home"
+            service: root.service
+          }
+          SearchPage {
+            anchors.fill: parent
+            visible: root.currentPage === "search"
+            service: root.service
+          }
           LibraryPage {
             anchors.fill: parent
             visible: root.currentPage === "library"
+            service: root.service
+          }
+          ArtistPage {
+            anchors.fill: parent
+            visible: root.currentPage === "artists"
+            service: root.service
+          }
+          AlbumPage {
+            anchors.fill: parent
+            visible: root.currentPage === "albums"
             service: root.service
           }
           SettingsPage {
