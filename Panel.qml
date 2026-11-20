@@ -2,6 +2,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import Quickshell
 import qs.Commons
+import qs.Ui
 
 import "qml"
 
@@ -151,22 +152,23 @@ Item {
             anchors.margins: 12
             spacing: 4
 
-            Row {
+            Column {
+              width: parent.width
               spacing: 8
-              bottomPadding: 12
-              Image {
-                width: 28
-                height: 28
-                anchors.verticalCenter: parent.verticalCenter
-                source: Qt.resolvedUrl("icon.png")
-                fillMode: Image.PreserveAspectFit
-                smooth: true
-                mipmap: true
+              bottomPadding: 14
+
+              SizedImage {
+                width: parent.width
+                height: width
+                url: Qt.resolvedUrl("assets/logo.jpg")
               }
+
               Text {
-                anchors.verticalCenter: parent.verticalCenter
+                width: parent.width
+                horizontalAlignment: Text.AlignHCenter
+                wrapMode: Text.WordWrap
                 color: Color.accent
-                font.pixelSize: 14
+                font.pixelSize: 20
                 font.bold: true
                 text: "Final Boss Player"
               }

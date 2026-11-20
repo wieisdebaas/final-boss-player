@@ -84,15 +84,12 @@ BarWidget {
     anchors.centerIn: parent
     spacing: Style.space(6)
 
-    Image {
+    SizedImage {
       id: logo
       anchors.verticalCenter: parent.verticalCenter
-      width: Style.font.body + 4
-      height: Style.font.body + 4
-      source: Qt.resolvedUrl("icon.png")
-      fillMode: Image.PreserveAspectFit
-      smooth: true
-      mipmap: true
+      width: Math.max(Style.font.iconLarge, root.barSize - Style.space(4))
+      height: width
+      url: Qt.resolvedUrl("icon.png")
       opacity: root.connected ? 1 : 0.5
     }
 
