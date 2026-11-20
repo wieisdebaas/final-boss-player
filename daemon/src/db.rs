@@ -102,6 +102,7 @@ pub struct Track {
     pub duration_ms: i64,
     pub has_art: bool,
     pub added_at: i64,
+    pub album_id: Option<i64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -311,7 +312,7 @@ impl Db {
         let pattern = format!("%{query}%");
         let mut statement = self.connection.prepare(
             "SELECT id, folder_id, path, size, mtime, title, artist, album_artist,
-                    album, track_no, disc_no, year, genre, duration_ms, has_art, added_at
+                    album, track_no, disc_no, year, genre, duration_ms, has_art, added_at, album_id
              FROM tracks
              WHERE title LIKE ?1 OR artist LIKE ?1 OR album_artist LIKE ?1 OR album LIKE ?1
              ORDER BY title COLLATE NOCASE, id
@@ -326,7 +327,7 @@ impl Db {
     pub fn list_tracks(&self, limit: u32, offset: u32) -> Result<Vec<Track>> {
         let mut statement = self.connection.prepare(
             "SELECT id, folder_id, path, size, mtime, title, artist, album_artist,
-                    album, track_no, disc_no, year, genre, duration_ms, has_art, added_at
+                    album, track_no, disc_no, year, genre, duration_ms, has_art, added_at, album_id
              FROM tracks
              ORDER BY title COLLATE NOCASE, id
              LIMIT ?1 OFFSET ?2",
@@ -387,7 +388,7 @@ impl Db {
     pub fn album_tracks(&self, album_id: i64) -> Result<Vec<Track>> {
         let mut statement = self.connection.prepare(
             "SELECT id, folder_id, path, size, mtime, title, artist, album_artist,
-                    album, track_no, disc_no, year, genre, duration_ms, has_art, added_at
+                    album, track_no, disc_no, year, genre, duration_ms, has_art, added_at, album_id
              FROM tracks
              WHERE album_id = ?1
              ORDER BY COALESCE(disc_no, 1), COALESCE(track_no, 2147483647),
@@ -400,7 +401,7 @@ impl Db {
     pub fn artist_tracks(&self, artist_id: i64, limit: u32, offset: u32) -> Result<Vec<Track>> {
         let mut statement = self.connection.prepare(
             "SELECT id, folder_id, path, size, mtime, title, artist, album_artist,
-                    album, track_no, disc_no, year, genre, duration_ms, has_art, added_at
+                    album, track_no, disc_no, year, genre, duration_ms, has_art, added_at, album_id
              FROM tracks
              WHERE artist_id = ?1
              ORDER BY album COLLATE NOCASE, COALESCE(disc_no, 1),
@@ -448,7 +449,7 @@ impl Db {
         }
         let mut statement = self.connection.prepare(
             "SELECT id, folder_id, path, size, mtime, title, artist, album_artist,
-                    album, track_no, disc_no, year, genre, duration_ms, has_art, added_at
+                    album, track_no, disc_no, year, genre, duration_ms, has_art, added_at, album_id
              FROM tracks WHERE id = ?1",
         )?;
         let tracks: Vec<Track> = statement
@@ -550,5 +551,6 @@ fn map_track(row: &rusqlite::Row<'_>) -> Result<Track> {
         duration_ms: row.get(13)?,
         has_art: row.get::<_, i64>(14)? != 0,
         added_at: row.get(15)?,
+        album_id: row.get(16)?,
     })
 }

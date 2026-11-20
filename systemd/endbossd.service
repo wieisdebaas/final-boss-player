@@ -1,0 +1,14 @@
+[Unit]
+Description=Endboss music daemon (endbossd)
+Documentation=https://github.com/endboss/endboss-player
+# Rendered by scripts/install.sh: @BINARY@ is replaced with the installed path.
+
+[Service]
+Type=simple
+ExecStart=@BINARY@
+Restart=on-failure
+RestartSec=2
+Environment=RUST_LOG=endbossd=info
+
+[Install]
+WantedBy=default.target

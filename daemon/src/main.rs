@@ -1,6 +1,7 @@
 pub mod art;
 pub mod db;
 pub mod meta;
+pub mod mpris;
 mod paths;
 pub mod player;
 pub mod protocol;

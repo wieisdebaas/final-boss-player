@@ -88,7 +88,7 @@ impl Repeat {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct QueueItem {
     pub id: i64,
     pub path: PathBuf,
@@ -624,6 +624,7 @@ pub fn load_playback(path: &Path) -> Option<SavedPlayback> {
 
 // ------------------------------------------------------------------ player
 
+#[derive(Debug, Clone, PartialEq)]
 pub enum Cmd {
     PlayItems { items: Vec<QueueItem>, start: usize },
     Pause,

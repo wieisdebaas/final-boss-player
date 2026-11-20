@@ -107,6 +107,7 @@ pub async fn run_with_paths(
         restore,
     );
     let listener = bind(socket_path)?;
+    crate::mpris::spawn(state.clone(), player.clone(), Some(art_dir.clone()));
     serve_context(
         listener,
         ServerContext::new(state, Some(db_path), Some(art_dir), Some(player)),
@@ -163,6 +164,7 @@ fn queue_item(track: &crate::db::Track) -> QueueItem {
             "genre": track.genre,
             "duration_ms": track.duration_ms,
             "has_art": track.has_art,
+            "album_id": track.album_id,
         }),
     }
 }

@@ -8,6 +8,9 @@ mod db;
 #[path = "../src/meta.rs"]
 mod meta;
 #[allow(dead_code)]
+#[path = "../src/mpris.rs"]
+mod mpris;
+#[allow(dead_code)]
 #[path = "../src/player.rs"]
 mod player;
 #[path = "../src/protocol.rs"]
