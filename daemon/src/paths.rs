@@ -46,9 +46,9 @@ impl Paths {
             .map(Path::to_path_buf)
             .unwrap_or_else(|| home.join(".local/state"));
 
-        let state_dir = state_root.join("endboss");
-        let cache_dir = cache_root.join("endboss");
-        let runtime_dir = runtime_root.join("endboss");
+        let state_dir = state_root.join("finalboss");
+        let cache_dir = cache_root.join("finalboss");
+        let runtime_dir = runtime_root.join("finalboss");
 
         Self {
             db_path: state_dir.join("library.sqlite"),

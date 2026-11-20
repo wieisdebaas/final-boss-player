@@ -6,11 +6,11 @@
 #
 # This never restarts the shell. Afterwards either restart it yourself
 # (e.g. `omarchy-restart-shell`) or enable the plugin from Omarchy's shell
-# settings. endbossd must be running for the UI to connect:
+# settings. finalbossd must be running for the UI to connect:
 #   cargo run --manifest-path daemon/Cargo.toml
 set -euo pipefail
 
-PLUGIN_ID="io.github.endboss.player"
+PLUGIN_ID="io.github.finalboss.player"
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PLUGINS_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/omarchy/plugins"
 TARGET="$PLUGINS_DIR/$PLUGIN_ID"
@@ -39,5 +39,5 @@ else
 fi
 
 echo "Linked $TARGET -> $REPO"
-echo "Next: restart the Omarchy shell (or enable the plugin), start endbossd,"
+echo "Next: restart the Omarchy shell (or enable the plugin), start finalbossd,"
 echo "then open the panel: omarchy-shell shell summon $PLUGIN_ID '{}'"

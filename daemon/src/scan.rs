@@ -97,7 +97,7 @@ impl TimedIo {
         for index in 0..workers.max(1) {
             let receiver = receiver.clone();
             let spawned = std::thread::Builder::new()
-                .name(format!("endboss-io-{index}"))
+                .name(format!("finalboss-io-{index}"))
                 .spawn(move || loop {
                     let job = {
                         let guard = receiver.lock().unwrap_or_else(|e| e.into_inner());

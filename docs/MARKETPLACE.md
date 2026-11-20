@@ -1,6 +1,6 @@
 # Omarchy Marketplace listing
 
-Use these fields when submitting End Boss Player to the Omarchy plugin
+Use these fields when submitting Final Boss Player to the Omarchy plugin
 marketplace. They match how other media plugins are tagged so people can find
 a music / NAS player.
 
@@ -8,10 +8,10 @@ a music / NAS player.
 
 | Field | Value |
 | --- | --- |
-| **Name** | End Boss Player |
-| **Plugin id** | `io.github.endboss.player` |
-| **Repository** | `https://github.com/wieisdebaas/endboss-player.git` |
-| **Homepage** | `https://github.com/wieisdebaas/endboss-player` |
+| **Name** | Final Boss Player |
+| **Plugin id** | `io.github.finalboss.player` |
+| **Repository** | `https://github.com/wieisdebaas/finalboss-player.git` |
+| **Homepage** | `https://github.com/wieisdebaas/finalboss-player` |
 | **License** | MIT |
 | **Category** | `Desktop` |
 | **Tags** (max 3) | `media`, `quickshell`, `bar` |
@@ -45,7 +45,7 @@ Optional: suggest missing tag `music` or `audio` on the submission form.
 ### Install note for the listing description
 
 `omarchy plugin add` installs the QML plugin only. Consumers must also run
-`scripts/install.sh` once to build `endbossd` and enable the systemd user unit.
+`scripts/install.sh` once to build `finalbossd` and enable the systemd user unit.
 Put that in the marketplace long description (see README Install section).
 
 ### Submit
@@ -53,7 +53,7 @@ Put that in the marketplace long description (see README Install section).
 ```sh
 gh issue create \
   --repo omacom/omarchy-plugin-marketplace \
-  --title "[Plugin]: End Boss Player" \
+  --title "[Plugin]: Final Boss Player" \
   --body-file docs/marketplace-submission.md
 ```
 
@@ -68,8 +68,8 @@ These are **not** marketplace tags; they drive Omarchy’s plugin / bar search:
 "aliases": [
   "music",
   "player",
-  "endboss",
-  "end boss",
+  "finalboss",
+  "final boss",
   "nas",
   "audio",
   "library",
@@ -90,7 +90,7 @@ omarchy quickshell music-player nas hyprland qml rust linux mpris flac
 Set with:
 
 ```sh
-gh repo edit wieisdebaas/endboss-player --add-topic omarchy --add-topic quickshell \
+gh repo edit wieisdebaas/finalboss-player --add-topic omarchy --add-topic quickshell \
   --add-topic music-player --add-topic nas --add-topic hyprland --add-topic qml \
   --add-topic rust --add-topic linux --add-topic mpris --add-topic flac
 ```

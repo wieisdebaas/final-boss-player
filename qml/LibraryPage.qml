@@ -18,7 +18,7 @@ Item {
   function refresh() {
     if (!service || !service.connected) {
       tracks = []
-      errorText = "endbossd is not running"
+      errorText = "finalbossd is not running"
       return
     }
     loading = true

@@ -17,7 +17,7 @@ Item {
   property bool closingFromHost: false
 
   readonly property string pluginId: manifest && manifest.id
-    ? String(manifest.id) : "io.github.endboss.player"
+    ? String(manifest.id) : "io.github.finalboss.player"
   readonly property string currentPage: service ? service.currentPage : "home"
 
   readonly property var sidebarItems: [
@@ -57,7 +57,7 @@ Item {
   FloatingWindow {
     id: window
     visible: root.opened
-    title: "End Boss Player"
+    title: "Final Boss Player"
     color: Color.background
     implicitWidth: 900
     implicitHeight: 640
@@ -168,7 +168,7 @@ Item {
                 color: Color.accent
                 font.pixelSize: 14
                 font.bold: true
-                text: "End Boss Player"
+                text: "Final Boss Player"
               }
             }
 

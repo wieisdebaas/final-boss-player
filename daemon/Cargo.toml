@@ -1,11 +1,11 @@
 [package]
-name = "endbossd"
+name = "finalbossd"
 version = "0.1.0"
 edition = "2021"
 license = "MIT"
 
 [[bin]]
-name = "endbossd"
+name = "finalbossd"
 path = "src/main.rs"
 
 [dependencies]

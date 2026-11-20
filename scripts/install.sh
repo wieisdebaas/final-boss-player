@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
-# Build and install End Boss Player's daemon for the current user.
+# Build and install Final Boss Player's daemon for the current user.
 #
 #   scripts/install.sh              build release, install, enable + start unit
 #   scripts/install.sh --dry-run    print what would happen, change nothing
 #   scripts/install.sh --uninstall  stop/disable the unit, remove the binary
 #
 # Installs:
-#   ~/.local/lib/endboss/endbossd                 release binary
-#   ~/.config/systemd/user/endbossd.service       user unit (from systemd/endbossd.service)
+#   ~/.local/lib/finalboss/finalbossd                 release binary
+#   ~/.config/systemd/user/finalbossd.service       user unit (from systemd/finalbossd.service)
 #
 # Plugin UI:
 #   Prefer:  omarchy plugin add <repo> --enable
@@ -20,11 +20,11 @@
 set -euo pipefail
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-LIB_DIR="${ENDBOSS_LIB_DIR:-$HOME/.local/lib/endboss}"
-BINARY="$LIB_DIR/endbossd"
+LIB_DIR="${FINALBOSS_LIB_DIR:-$HOME/.local/lib/finalboss}"
+BINARY="$LIB_DIR/finalbossd"
 UNIT_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
-UNIT="$UNIT_DIR/endbossd.service"
-TEMPLATE="$REPO/systemd/endbossd.service"
+UNIT="$UNIT_DIR/finalbossd.service"
+TEMPLATE="$REPO/systemd/finalbossd.service"
 TARGET_DIR="${CARGO_TARGET_DIR:-$REPO/daemon/target}"
 
 DRY_RUN=0
@@ -52,17 +52,17 @@ have_systemd_user() {
 
 if [[ $UNINSTALL -eq 1 ]]; then
   if have_systemd_user || [[ $DRY_RUN -eq 1 ]]; then
-    run systemctl --user disable --now endbossd.service || true
+    run systemctl --user disable --now finalbossd.service || true
   fi
   run rm -f "$UNIT" "$BINARY"
   run rmdir "$LIB_DIR" 2>/dev/null || true
   # Only unlink a development symlink; leave omarchy plugin add installs alone.
-  if [[ -L "${XDG_CONFIG_HOME:-$HOME/.config}/omarchy/plugins/io.github.endboss.player" ]]; then
+  if [[ -L "${XDG_CONFIG_HOME:-$HOME/.config}/omarchy/plugins/io.github.finalboss.player" ]]; then
     run "$REPO/scripts/dev-link.sh" --unlink
   fi
   have_systemd_user && run systemctl --user daemon-reload || true
-  echo "Uninstalled endbossd. Library database and cache were left in place."
-  echo "Remove the shell plugin with: omarchy plugin remove io.github.endboss.player --yes"
+  echo "Uninstalled finalbossd. Library database and cache were left in place."
+  echo "Remove the shell plugin with: omarchy plugin remove io.github.finalboss.player --yes"
   exit 0
 fi
 
@@ -76,7 +76,7 @@ echo "==> Installing binary to $BINARY"
 run mkdir -p "$LIB_DIR"
 # Install via a temp name + rename so a running daemon's inode is not
 # overwritten in place (avoids "text file busy").
-run install -m 0755 "$TARGET_DIR/release/endbossd" "$BINARY.new"
+run install -m 0755 "$TARGET_DIR/release/finalbossd" "$BINARY.new"
 run mv -f "$BINARY.new" "$BINARY"
 
 echo "==> Installing user unit to $UNIT"
@@ -87,18 +87,18 @@ else
   sed "s|@BINARY@|$BINARY|g" "$TEMPLATE" > "$UNIT"
 fi
 
-echo "==> Enabling endbossd.service"
+echo "==> Enabling finalbossd.service"
 if have_systemd_user || [[ $DRY_RUN -eq 1 ]]; then
   run systemctl --user daemon-reload
-  run systemctl --user enable endbossd.service
+  run systemctl --user enable finalbossd.service
   # restart so an upgrade picks up the new binary; start if it was stopped
-  run systemctl --user restart endbossd.service
+  run systemctl --user restart finalbossd.service
 else
   echo "systemd user session not available; skipping enable/start." >&2
   echo "Start manually: $BINARY" >&2
 fi
 
-PLUGIN_ID="io.github.endboss.player"
+PLUGIN_ID="io.github.finalboss.player"
 PLUGIN_TARGET="${XDG_CONFIG_HOME:-$HOME/.config}/omarchy/plugins/$PLUGIN_ID"
 if [[ -L "$PLUGIN_TARGET" ]] || [[ ! -e "$PLUGIN_TARGET" ]]; then
   echo "==> Linking Omarchy plugin (development)"
@@ -114,8 +114,8 @@ cat <<MSG
 
 Done. Next:
   1. Restart the Omarchy shell (omarchy-restart-shell) and enable/place the
-     "End Boss Player" bar widget.
+     "Final Boss Player" bar widget.
   2. Open the panel, go to Settings and add your music folder (e.g. a NAS mount).
-  3. Check the daemon:  systemctl --user status endbossd
-     Media keys / playerctl work via MPRIS (org.mpris.MediaPlayer2.endboss).
+  3. Check the daemon:  systemctl --user status finalbossd
+     Media keys / playerctl work via MPRIS (org.mpris.MediaPlayer2.finalboss).
 MSG

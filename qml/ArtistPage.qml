@@ -22,7 +22,7 @@ Item {
     if (!service || !service.connected) {
       artists = []
       tracks = []
-      errorText = "endbossd is not running"
+      errorText = "finalbossd is not running"
       return
     }
     loading = true

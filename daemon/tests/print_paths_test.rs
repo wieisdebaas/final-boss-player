@@ -9,7 +9,7 @@ fn print_paths_outputs_json_and_exits_successfully() {
     let cache = temp.path().join("cache");
     let runtime = temp.path().join("runtime");
 
-    let output = Command::new(env!("CARGO_BIN_EXE_endbossd"))
+    let output = Command::new(env!("CARGO_BIN_EXE_finalbossd"))
         .arg("--print-paths")
         .env("XDG_STATE_HOME", &state)
         .env("XDG_CACHE_HOME", &cache)
@@ -22,7 +22,7 @@ fn print_paths_outputs_json_and_exits_successfully() {
     assert_eq!(
         paths["socket_path"],
         runtime
-            .join("endboss/backend.sock")
+            .join("finalboss/backend.sock")
             .to_string_lossy()
             .as_ref()
     );

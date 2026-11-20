@@ -1,8 +1,8 @@
-# End Boss Player — User Manual
+# Final Boss Player — User Manual
 
 **Your NAS. Your Music. Always Playing.**
 
-**End Boss Player** (tech short name: **endboss**) is a lightweight Omarchy music player. It indexes music folders you already have mounted (local disk or NAS), streams from those paths, and never copies your library onto the machine.
+**Final Boss Player** (tech short name: **finalboss**) is a lightweight Omarchy music player. It indexes music folders you already have mounted (local disk or NAS), streams from those paths, and never copies your library onto the machine.
 
 ---
 
@@ -13,24 +13,24 @@
 **From Omarchy (recommended for users):**
 
 ```sh
-omarchy plugin add https://github.com/wieisdebaas/endboss-player.git --enable
-cd ~/.config/omarchy/plugins/io.github.endboss.player
+omarchy plugin add https://github.com/wieisdebaas/finalboss-player.git --enable
+cd ~/.config/omarchy/plugins/io.github.finalboss.player
 ./scripts/install.sh
 omarchy-restart-shell
 ```
 
-`omarchy plugin add` installs the UI only. `scripts/install.sh` builds `endbossd`
+`omarchy plugin add` installs the UI only. `scripts/install.sh` builds `finalbossd`
 and enables the systemd user service. You need a Rust toolchain (`cargo`) once.
 
 **From a git checkout (developers):**
 
 ```sh
 ./scripts/install.sh
-omarchy plugin enable io.github.endboss.player
+omarchy plugin enable io.github.finalboss.player
 omarchy-restart-shell
 ```
 
-Add **End Boss Player** to your bar if it is not already there (Omarchy bar / widget settings).
+Add **Final Boss Player** to your bar if it is not already there (Omarchy bar / widget settings).
 
 ### 3. Add a music folder
 
@@ -39,20 +39,20 @@ Add **End Boss Player** to your bar if it is not already there (Omarchy bar / wi
 3. Enter an absolute path to a mounted folder, for example:
    - `/mnt/nas/Music`
    - `/home/robin/Downloads/YT/Audio`
-4. Click **Add Folder**. Endboss scans in the background; progress shows in the player state.
+4. Click **Add Folder**. Final Boss scans in the background; progress shows in the player state.
 
 Music stays on the share. Only a small SQLite index and artwork thumbnails are stored locally.
 
 ### 4. Check the daemon
 
 ```sh
-systemctl --user status endbossd
+systemctl --user status finalbossd
 ```
 
 It should be **active (running)**. Logs:
 
 ```sh
-journalctl --user -u endbossd -f
+journalctl --user -u finalbossd -f
 ```
 
 ---
@@ -104,7 +104,7 @@ The bottom bar always shows the current track and play / pause / seek / volume. 
 
 ### Media keys
 
-While `endbossd` is running, system media keys and tools that speak MPRIS control Endboss (player name `endboss`). Playback continues with the panel closed.
+While `finalbossd` is running, system media keys and tools that speak MPRIS control Final Boss (player name `finalboss`). Playback continues with the panel closed.
 
 ---
 
@@ -124,11 +124,11 @@ Supported for indexing: FLAC, MP3, M4A/AAC, WAV, OGG, OPUS.
 
 | Data | Location |
 | --- | --- |
-| Library index | `~/.local/state/endboss/library.sqlite` |
-| Last track / position | `~/.local/state/endboss/playback.json` |
-| Artwork thumbs | `~/.cache/endboss/art/` |
-| Daemon binary | `~/.local/lib/endboss/endbossd` |
-| Plugin | `~/.config/omarchy/plugins/io.github.endboss.player` |
+| Library index | `~/.local/state/finalboss/library.sqlite` |
+| Last track / position | `~/.local/state/finalboss/playback.json` |
+| Artwork thumbs | `~/.cache/finalboss/art/` |
+| Daemon binary | `~/.local/lib/finalboss/finalbossd` |
+| Plugin | `~/.config/omarchy/plugins/io.github.finalboss.player` |
 
 Original audio files are never modified or copied into these locations.
 
@@ -138,10 +138,10 @@ Original audio files are never modified or copied into these locations.
 
 | Problem | What to try |
 | --- | --- |
-| No sound / empty library | `systemctl --user status endbossd` — start or restart if needed |
-| Plugin missing from bar | `omarchy plugin enable io.github.endboss.player` then `omarchy-restart-shell` |
+| No sound / empty library | `systemctl --user status finalbossd` — start or restart if needed |
+| Plugin missing from bar | `omarchy plugin enable io.github.finalboss.player` then `omarchy-restart-shell` |
 | Folder added but no tracks | Confirm the path is mounted and readable; watch scan in Settings / logs |
-| NAS hangs or errors | Remount the share; check `journalctl --user -u endbossd`; open/stat timeouts are 5s |
+| NAS hangs or errors | Remount the share; check `journalctl --user -u finalbossd`; open/stat timeouts are 5s |
 | Track won’t play | Check format (Opus/ALAC may fail); look for `file_unavailable` / `decode_failed` in state or logs |
 | Media keys do nothing | Confirm daemon is running; another player may own the keys |
 
@@ -149,7 +149,7 @@ Uninstall:
 
 ```sh
 ./scripts/install.sh --uninstall
-omarchy plugin remove io.github.endboss.player --yes
+omarchy plugin remove io.github.finalboss.player --yes
 omarchy-restart-shell
 ```
 
@@ -157,6 +157,6 @@ The library database and artwork cache are left in place unless you delete them 
 
 ---
 
-## What End Boss Player does not do (v1)
+## What Final Boss Player does not do (v1)
 
-No playlists, Spotify, cloud accounts, lyrics, online metadata, or built-in SMB/NFS client. Use the OS to mount network shares, then point End Boss Player at the mount path.
+No playlists, Spotify, cloud accounts, lyrics, online metadata, or built-in SMB/NFS client. Use the OS to mount network shares, then point Final Boss Player at the mount path.

@@ -1,6 +1,6 @@
 # Contributing
 
-Thanks for helping with End Boss Player.
+Thanks for helping with Final Boss Player.
 
 ## Setup
 
@@ -25,7 +25,7 @@ Thanks for helping with End Boss Player.
 
 | Path | Role |
 | --- | --- |
-| `daemon/` | Rust playback daemon (`endbossd`) |
+| `daemon/` | Rust playback daemon (`finalbossd`) |
 | `qml/`, `*.qml` | Quickshell plugin UI |
 | `manifest.json` | Omarchy plugin metadata |
 | `scripts/` | Install / unlink helpers |

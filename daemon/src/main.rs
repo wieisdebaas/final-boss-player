@@ -15,7 +15,7 @@ use paths::Paths;
 use state::AppState;
 
 #[derive(Debug, Parser)]
-#[command(name = "endbossd")]
+#[command(name = "finalbossd")]
 struct Args {
     #[arg(long)]
     print_paths: bool,
@@ -43,13 +43,13 @@ async fn main() -> Result<()> {
 }
 
 /// Logs to stderr (captured by journald under systemd). Filter with `RUST_LOG`,
-/// defaulting to `endbossd=info`. Colors only when stderr is a terminal.
+/// defaulting to `finalbossd=info`. Colors only when stderr is a terminal.
 fn init_logging() {
     use std::io::IsTerminal;
     use tracing_subscriber::EnvFilter;
 
     let filter =
-        EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("endbossd=info"));
+        EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("finalbossd=info"));
     let ansi = std::io::stderr().is_terminal();
     tracing_subscriber::fmt()
         .with_env_filter(filter)

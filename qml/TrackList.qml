@@ -72,23 +72,26 @@ ListView {
       // Let rowArea receive clicks in empty space; nested areas still win on top.
       z: 1
 
+      // Always reserve this column so the current track can show play/pause
+      // even when showNumbers is false (Search, Home, Artists).
       Text {
         width: 28
         anchors.verticalCenter: parent.verticalCenter
         horizontalAlignment: Text.AlignRight
         color: row.isCurrent ? Color.accent : Color.muted
         font.pixelSize: 12
-        visible: root.showNumbers
         text: row.isCurrent && root.service && root.service.playing
           ? "\u23F8"
           : row.isCurrent
             ? "\u25B6"
-            : String(row.modelData.track_no > 0 ? row.modelData.track_no : row.index + 1)
+            : root.showNumbers
+              ? String(row.modelData.track_no > 0 ? row.modelData.track_no : row.index + 1)
+              : ""
       }
 
       Column {
         anchors.verticalCenter: parent.verticalCenter
-        width: parent.width - (root.showNumbers ? 40 : 0) - 60 - 24
+        width: parent.width - 40 - 60 - 24
         spacing: 1
 
         Text {

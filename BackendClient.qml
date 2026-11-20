@@ -3,7 +3,7 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 
-// Line-delimited JSON client for endbossd (protocol v1).
+// Line-delimited JSON client for finalbossd (protocol v1).
 //
 //   request : {"v":1,"id":N,"cmd":"query", ...fields}\n
 //   response: {"type":"response","id":N,"ok":true,"result":...}
@@ -29,8 +29,8 @@ Item {
 
   readonly property string socketPath: {
     var runtime = Quickshell.env("XDG_RUNTIME_DIR")
-    if (runtime) return String(runtime) + "/endboss/backend.sock"
-    return String(Quickshell.env("HOME") || "") + "/.local/state/endboss/backend.sock"
+    if (runtime) return String(runtime) + "/finalboss/backend.sock"
+    return String(Quickshell.env("HOME") || "") + "/.local/state/finalboss/backend.sock"
   }
 
   signal stateReceived(var state)
@@ -38,7 +38,7 @@ Item {
   function resetPending(reason) {
     var waiters = pending
     pending = ({})
-    var message = String(reason || "endbossd is unavailable")
+    var message = String(reason || "finalbossd is unavailable")
     for (var id in waiters) {
       var callback = waiters[id]
       if (typeof callback === "function") callback(false, null, message)
@@ -50,7 +50,7 @@ Item {
     var socket = activeSocket
     if (!socket || !socket.connected) {
       if (typeof callback === "function")
-        callback(false, null, "endbossd is not running")
+        callback(false, null, "finalbossd is not running")
       return 0
     }
     var id = nextId++
@@ -101,12 +101,12 @@ Item {
     socketLoader.active = false
     lastState = null
     reconnectAttempt = 0
-    resetPending("endbossd connection closed")
+    resetPending("finalbossd connection closed")
   }
 
   onConnectedChanged: {
     if (connected) reconnectAttempt = 0
-    else resetPending("endbossd disconnected")
+    else resetPending("finalbossd disconnected")
   }
 
   Component {

@@ -1,7 +1,7 @@
-# End Boss Player
+# Final Boss Player
 
 <p align="center">
-  <img src="preview.png" alt="End Boss Player logo" width="220" />
+  <img src="preview.png" alt="Final Boss Player logo" width="220" />
 </p>
 
 <p align="center">
@@ -16,17 +16,17 @@
   <a href="LICENSE">MIT</a>
 </p>
 
-End Boss Player indexes music folders you already have mounted (SMB/NFS/local),
+Final Boss Player indexes music folders you already have mounted (SMB/NFS/local),
 streams audio from disk without copying the library, and keeps a small SQLite
 index on your machine. The UI is an Omarchy shell plugin (bar mini-player +
-panel); playback runs in a Rust daemon (`endbossd`) with MPRIS media-key
+panel); playback runs in a Rust daemon (`finalbossd`) with MPRIS media-key
 support.
 
 | | |
 | --- | --- |
-| **Display name** | End Boss Player |
-| **Plugin id** | `io.github.endboss.player` |
-| **Daemon** | `endbossd` |
+| **Display name** | Final Boss Player |
+| **Plugin id** | `io.github.finalboss.player` |
+| **Daemon** | `finalbossd` |
 | **License** | MIT |
 
 ## Install (Omarchy)
@@ -36,32 +36,32 @@ Requires [Omarchy](https://omarchy.org/) (Quickshell shell), a Rust toolchain
 
 ```sh
 # 1. Install the shell plugin
-omarchy plugin add https://github.com/wieisdebaas/endboss-player.git --enable
+omarchy plugin add https://github.com/wieisdebaas/finalboss-player.git --enable
 
 # 2. Build and enable the playback daemon (systemd --user)
-cd ~/.config/omarchy/plugins/io.github.endboss.player
+cd ~/.config/omarchy/plugins/io.github.finalboss.player
 ./scripts/install.sh
 
 # 3. Reload the shell and place the widget on the bar if needed
 omarchy-restart-shell
 ```
 
-Open **End Boss Player** from the bar → **Settings** → add a music folder path
+Open **Final Boss Player** from the bar → **Settings** → add a music folder path
 (for example `/mnt/nas/Music`).
 
 ### Check status
 
 ```sh
-systemctl --user status endbossd
-journalctl --user -u endbossd -f
-omarchy plugin list | grep endboss
+systemctl --user status finalbossd
+journalctl --user -u finalbossd -f
+omarchy plugin list | grep finalboss
 ```
 
 ### Update
 
 ```sh
-omarchy plugin update io.github.endboss.player
-cd ~/.config/omarchy/plugins/io.github.endboss.player
+omarchy plugin update io.github.finalboss.player
+cd ~/.config/omarchy/plugins/io.github.finalboss.player
 ./scripts/install.sh          # rebuild daemon after updates
 omarchy-restart-shell
 ```
@@ -69,15 +69,15 @@ omarchy-restart-shell
 ### Remove
 
 ```sh
-cd ~/.config/omarchy/plugins/io.github.endboss.player
+cd ~/.config/omarchy/plugins/io.github.finalboss.player
 ./scripts/install.sh --uninstall
-omarchy plugin remove io.github.endboss.player --yes
+omarchy plugin remove io.github.finalboss.player --yes
 omarchy-restart-shell
 ```
 
 `install.sh --uninstall` removes the daemon binary, user unit, and plugin
 symlink helpers. The SQLite index and artwork cache under
-`~/.local/state/endboss/` and `~/.cache/endboss/` are left in place unless you
+`~/.local/state/finalboss/` and `~/.cache/finalboss/` are left in place unless you
 delete them yourself.
 
 ## Features
@@ -106,8 +106,8 @@ decoder (documented in the manual).
 ## Development
 
 ```sh
-git clone https://github.com/wieisdebaas/endboss-player.git
-cd endboss-player
+git clone https://github.com/wieisdebaas/finalboss-player.git
+cd finalboss-player
 
 # Link into Omarchy + build daemon
 ./scripts/dev-link.sh
@@ -125,7 +125,7 @@ Design and implementation notes live under `docs/superpowers/` for contributors.
 ## Discoverability
 
 **Omarchy shell search aliases** (bar / plugin picker): `music`, `player`,
-`endboss`, `end boss`, `nas`, `audio`, `library`, `mpris`, `flac`, `local-music`.
+`finalboss`, `final boss`, `nas`, `audio`, `library`, `mpris`, `flac`, `local-music`.
 
 **Marketplace tags** (see [docs/MARKETPLACE.md](docs/MARKETPLACE.md)):
 

@@ -21,7 +21,7 @@ use crate::player::{Cmd, Player};
 use crate::protocol::PlayerState;
 use crate::state::AppState;
 
-pub const BUS_NAME: &str = "org.mpris.MediaPlayer2.endboss";
+pub const BUS_NAME: &str = "org.mpris.MediaPlayer2.finalboss";
 const OBJECT_PATH: &str = "/org/mpris/MediaPlayer2";
 const NO_TRACK: &str = "/org/mpris/MediaPlayer2/TrackList/NoTrack";
 
@@ -71,7 +71,7 @@ pub fn seek_target_ms(state: &PlayerState, offset_us: i64) -> u64 {
 }
 
 fn track_id(id: i64) -> String {
-    format!("/org/endboss/track/{id}")
+    format!("/org/finalboss/track/{id}")
 }
 
 /// MPRIS `Metadata` for the current track (empty when nothing is loaded).
@@ -169,7 +169,7 @@ impl Root {
     }
     #[zbus(property)]
     fn identity(&self) -> &str {
-        "Endboss"
+        "Final Boss"
     }
     #[zbus(property)]
     fn supported_uri_schemes(&self) -> Vec<String> {
@@ -375,7 +375,7 @@ mod tests {
         state.track = Some(json!({
             "id": 7,
             "title": "Final Form",
-            "artist": "Endboss",
+            "artist": "Final Boss",
             "album": "Phase One",
             "album_id": 3
         }));
@@ -417,12 +417,12 @@ mod tests {
         let map = metadata(&playing_state(), Some(dir.path()));
         assert_eq!(
             map["mpris:trackid"],
-            Value::from(ObjectPath::try_from("/org/endboss/track/7").unwrap())
+            Value::from(ObjectPath::try_from("/org/finalboss/track/7").unwrap())
         );
         assert_eq!(map["xesam:title"], Value::from("Final Form".to_string()));
         assert_eq!(
             map["xesam:artist"],
-            Value::from(vec!["Endboss".to_string()])
+            Value::from(vec!["Final Boss".to_string()])
         );
         assert_eq!(map["xesam:album"], Value::from("Phase One".to_string()));
         assert_eq!(map["mpris:length"], Value::from(180_000_000_i64));

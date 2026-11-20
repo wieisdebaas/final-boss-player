@@ -15,7 +15,7 @@ import qs.Ui
 BarWidget {
   id: root
 
-  readonly property string pluginId: "io.github.endboss.player"
+  readonly property string pluginId: "io.github.finalboss.player"
   readonly property var player: bar && bar.shell ? bar.shell.serviceFor(pluginId) : null
   readonly property bool connected: !!player && player.connected
   readonly property bool hasMedia: !!player && player.hasMedia
@@ -199,7 +199,7 @@ BarWidget {
               font.family: root.bar ? root.bar.fontFamily : ""
               font.pixelSize: Style.font.subtitle
               font.bold: true
-              text: !root.connected ? "endbossd not running"
+              text: !root.connected ? "finalbossd not running"
                 : (root.hasMedia ? root.title : "Nothing playing")
             }
 

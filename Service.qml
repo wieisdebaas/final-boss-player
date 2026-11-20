@@ -1,7 +1,7 @@
 import QtQuick
 
 // Shared brain for the bar widget and the lazy full panel. It owns the single
-// endbossd connection and exposes the latest player state plus thin command
+// finalbossd connection and exposes the latest player state plus thin command
 // wrappers. UI components never talk to the socket directly.
 Item {
   id: root
@@ -16,7 +16,7 @@ Item {
   property var pluginRegistry: null
 
   readonly property string pluginId: manifest && manifest.id
-    ? String(manifest.id) : "io.github.endboss.player"
+    ? String(manifest.id) : "io.github.finalboss.player"
 
   readonly property var pages: ["home", "search", "library", "artists", "albums", "settings"]
   property string currentPage: "home"
@@ -138,7 +138,7 @@ Item {
     uiVisible = visible === true
   }
 
-  // Force a fresh connection attempt (e.g. after starting endbossd).
+  // Force a fresh connection attempt (e.g. after starting finalbossd).
   function reconnect() {
     backend.wanted = false
     backend.wanted = true

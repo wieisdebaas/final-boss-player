@@ -4,11 +4,11 @@
 
 **Goal:** Ship a small Omarchy Quickshell plugin that indexes mounted music folders in SQLite and streams playback from disk via a Rust daemon.
 
-**Architecture:** Omarchy plugin (`Service` / `BarWidget` / `Panel`) talks JSON-RPC over a Unix socket to `endbossd`. The daemon owns scan, SQLite, artwork thumbs, and streaming playback. Music files never leave the NAS mount.
+**Architecture:** Omarchy plugin (`Service` / `BarWidget` / `Panel`) talks JSON-RPC over a Unix socket to `finalbossd`. The daemon owns scan, SQLite, artwork thumbs, and streaming playback. Music files never leave the NAS mount.
 
 **Tech Stack:** Quickshell QML, Rust (tokio, rusqlite, lofty, symphonia, cpal/rodio or similar), SQLite, systemd user unit, Omarchy plugin manifest.
 
-**Spec:** `docs/superpowers/specs/2026-11-20-endboss-player-design.md`
+**Spec:** `docs/superpowers/specs/2026-11-20-finalboss-player-design.md`
 
 ## Global Constraints
 
@@ -17,17 +17,17 @@
 - Never modify audio files; no online metadata
 - Daemon is source of truth for playback state
 - Timed NAS I/O; Unavailable must not freeze Quickshell
-- Lazy artwork thumbs only under `~/.cache/endboss/art/`
-- State/DB under `~/.local/state/endboss/`
-- Plugin id: `io.github.endboss.player`
-- Socket: `$XDG_RUNTIME_DIR/endboss/backend.sock`
+- Lazy artwork thumbs only under `~/.cache/finalboss/art/`
+- State/DB under `~/.local/state/finalboss/`
+- Plugin id: `io.github.finalboss.player`
+- Socket: `$XDG_RUNTIME_DIR/finalboss/backend.sock`
 - Protocol: UTF-8 JSON, one object per line, `"v":1`
 - No playlists / Spotify / lyrics / accounts in v1
 
 ## File Structure
 
 ```
-endboss-player/
+finalboss-player/
 ├── README.md
 ├── manifest.json                 # Omarchy plugin
 ├── Service.qml                   # shared UI state + IPC
@@ -43,7 +43,7 @@ endboss-player/
 │   ├── SettingsPage.qml
 │   ├── PlayerBar.qml
 │   └── components/…              # rows, buttons, art
-├── systemd/endbossd.service
+├── systemd/finalbossd.service
 ├── scripts/install.sh
 ├── daemon/
 │   ├── Cargo.toml
@@ -83,13 +83,13 @@ endboss-player/
 
 ```toml
 [package]
-name = "endbossd"
+name = "finalbossd"
 version = "0.1.0"
 edition = "2021"
 license = "MIT"
 
 [[bin]]
-name = "endbossd"
+name = "finalbossd"
 path = "src/main.rs"
 
 [dependencies]
@@ -110,8 +110,8 @@ tempfile = "3"
 
 ```rust
 // tests assert Paths::from_env_with(home, state, cache, runtime)
-// socket_path == runtime.join("endboss/backend.sock")
-// db_path == state.join("endboss/library.sqlite")
+// socket_path == runtime.join("finalboss/backend.sock")
+// db_path == state.join("finalboss/library.sqlite")
 ```
 
 - [ ] **Step 3: `main.rs` prints paths with `--print-paths` and exits 0**
@@ -125,7 +125,7 @@ Expected: PASS
 
 ```bash
 git add daemon README.md
-git commit -m "Add endbossd crate with XDG paths"
+git commit -m "Add finalbossd crate with XDG paths"
 ```
 
 ---
@@ -153,7 +153,7 @@ git commit -m "Add endbossd crate with XDG paths"
 
 ```bash
 git add daemon/src/protocol.rs daemon/tests/protocol_test.rs
-git commit -m "Define endbossd JSON-RPC protocol v1"
+git commit -m "Define finalbossd JSON-RPC protocol v1"
 ```
 
 ---
@@ -204,7 +204,7 @@ git commit -m "Add SQLite library schema and queries"
 - [ ] **Step 3: Commit**
 
 ```bash
-git commit -m "Add endbossd Unix socket server and state snapshots"
+git commit -m "Add finalbossd Unix socket server and state snapshots"
 ```
 
 ---
@@ -229,7 +229,7 @@ git commit -m "Add endbossd Unix socket server and state snapshots"
 
 - [ ] **Step 2: Implement meta + scan; wire AddFolder to spawn scan task**
 
-- [ ] **Step 3: Manual smoke: `endbossd` + JSON `add_folder` on a tiny local music dir**
+- [ ] **Step 3: Manual smoke: `finalbossd` + JSON `add_folder` on a tiny local music dir**
 
 - [ ] **Step 4: Commit**
 
@@ -262,7 +262,7 @@ git commit -m "Scan mounted folders and index metadata in SQLite"
 - [ ] **Step 4: Commit**
 
 ```bash
-git commit -m "Stream local audio playback from endbossd"
+git commit -m "Stream local audio playback from finalbossd"
 ```
 
 ---
@@ -302,7 +302,7 @@ git commit -m "Add lazy artwork cache and library query RPC"
 - `Service.qml` holds `playerState`, `navigate(page)`, shortcuts; only shared brain
 - Panel shows Library + Settings first
 
-- [ ] **Step 1: manifest with kinds service/bar-widget/panel, id `io.github.endboss.player`**
+- [ ] **Step 1: manifest with kinds service/bar-widget/panel, id `io.github.finalboss.player`**
 
 - [ ] **Step 2: BackendClient connect + ping; Service exposes state**
 
@@ -313,7 +313,7 @@ git commit -m "Add lazy artwork cache and library query RPC"
 - [ ] **Step 5: Commit**
 
 ```bash
-git commit -m "Add Omarchy plugin shell wired to endbossd"
+git commit -m "Add Omarchy plugin shell wired to finalbossd"
 ```
 
 ---
@@ -343,14 +343,14 @@ git commit -m "Add library browse, search, home, and shortcuts"
 
 **Files:**
 - Create: `BarWidget.qml`
-- Create: `systemd/endbossd.service`
+- Create: `systemd/finalbossd.service`
 - Create: `scripts/install.sh`
 - Create: `daemon/src/mpris.rs`
 - Update: `README.md`
 
 **Interfaces:**
 - Mini-player: art, title, artist, prev/play/next; Esc closes
-- User unit starts `endbossd`; install script builds release, installs binary to `~/.local/lib/endboss/`, enables unit, symlinks plugin
+- User unit starts `finalbossd`; install script builds release, installs binary to `~/.local/lib/finalboss/`, enables unit, symlinks plugin
 - MPRIS play/pause/next/prev/seek enough for media keys
 
 - [ ] **Step 1: BarWidget mini-player using Service state**

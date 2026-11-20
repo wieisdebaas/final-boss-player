@@ -703,7 +703,7 @@ impl Player {
             .duration_since(std::time::UNIX_EPOCH)
             .map_or(0x9E37_79B9, |elapsed| elapsed.as_nanos() as u64);
         let spawned = std::thread::Builder::new()
-            .name("endboss-player".into())
+            .name("finalboss-player".into())
             .spawn(move || {
                 let mut engine = Engine::new(make_backend(), seed);
                 if let Some(restore) = restore {

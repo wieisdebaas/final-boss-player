@@ -57,8 +57,8 @@ Item {
       color: Color.muted
       font.pixelSize: 12
       text: root.service && root.service.connected
-        ? "Connected to endbossd"
-        : "endbossd is not running \u2014 start it, then reconnect."
+        ? "Connected to finalbossd"
+        : "finalbossd is not running \u2014 start it, then reconnect."
     }
 
     Rectangle {

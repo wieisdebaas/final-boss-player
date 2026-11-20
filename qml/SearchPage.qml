@@ -29,7 +29,7 @@ Item {
     }
     if (!service || !service.connected) {
       results = []
-      errorText = "endbossd is not running"
+      errorText = "finalbossd is not running"
       return
     }
     loading = true
