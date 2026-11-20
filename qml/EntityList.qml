@@ -10,6 +10,9 @@ ListView {
   id: root
 
   property var items: []
+  property var service: null
+  // Album rows only. Artists have no picture in the library.
+  property bool covers: false
   property bool playable: false
   property string emptyText: "Nothing here"
   property var secondaryOf: function(item) { return "" }
@@ -42,6 +45,29 @@ ListView {
       ? Qt.rgba(Color.foreground.r, Color.foreground.g, Color.foreground.b, 0.08)
       : "transparent"
 
+    property string artPath: ""
+    property int artAlbumId: -1
+
+    function refreshArt() {
+      if (!root.covers || !root.service || !root.service.connected || row.modelData.has_art !== true) {
+        artPath = ""
+        artAlbumId = -1
+        return
+      }
+      var albumId = Number(row.modelData.id)
+      if (!(albumId >= 0)) return
+      if (albumId === artAlbumId) return
+      artAlbumId = albumId
+      artPath = ""
+      root.service.request("get_art", { album_id: albumId }, function(ok, result) {
+        if (albumId !== row.artAlbumId) return
+        row.artPath = ok && result && result.path ? String(result.path) : ""
+      })
+    }
+
+    onModelDataChanged: refreshArt()
+    Component.onCompleted: refreshArt()
+
     Rectangle {
       id: cover
       anchors.left: parent.left
@@ -50,9 +76,23 @@ ListView {
       width: 36
       height: 36
       radius: 4
+      clip: true
       color: Qt.rgba(Color.accent.r, Color.accent.g, Color.accent.b, 0.18)
+
+      Image {
+        anchors.fill: parent
+        visible: row.artPath !== ""
+        source: row.artPath !== "" ? "file://" + row.artPath : ""
+        fillMode: Image.PreserveAspectCrop
+        sourceSize.width: 72
+        sourceSize.height: 72
+        asynchronous: true
+        cache: true
+      }
+
       Text {
         anchors.centerIn: parent
+        visible: row.artPath === ""
         color: Color.accent
         font.pixelSize: 15
         font.bold: true

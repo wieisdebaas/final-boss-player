@@ -77,6 +77,8 @@ Item {
       Layout.fillWidth: true
       Layout.fillHeight: true
       items: root.albums
+      service: root.service
+      covers: true
       playable: true
       emptyText: "No albums yet. Add a music folder in Settings."
       secondaryOf: function(item) {
