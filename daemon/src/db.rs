@@ -2,6 +2,7 @@ use std::collections::HashSet;
 use std::path::Path;
 
 use rusqlite::{ffi, params, Connection, Result};
+use serde::Serialize;
 
 const SUPPORTED_SCHEMA_VERSION: i64 = 1;
 const VERSION_ONE_SCHEMA: &str = "
@@ -83,7 +84,7 @@ pub struct TrackInput {
     pub has_art: bool,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Track {
     pub id: i64,
     pub folder_id: i64,
@@ -103,7 +104,7 @@ pub struct Track {
     pub added_at: i64,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Album {
     pub id: i64,
     pub name: String,
@@ -113,7 +114,7 @@ pub struct Album {
     pub has_art: bool,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Artist {
     pub id: i64,
     pub name: String,
@@ -121,7 +122,7 @@ pub struct Artist {
     pub track_count: i64,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct LibraryStats {
     pub folders: i64,
     pub tracks: i64,
@@ -322,6 +323,20 @@ impl Db {
         tracks
     }
 
+    pub fn list_tracks(&self, limit: u32, offset: u32) -> Result<Vec<Track>> {
+        let mut statement = self.connection.prepare(
+            "SELECT id, folder_id, path, size, mtime, title, artist, album_artist,
+                    album, track_no, disc_no, year, genre, duration_ms, has_art, added_at
+             FROM tracks
+             ORDER BY title COLLATE NOCASE, id
+             LIMIT ?1 OFFSET ?2",
+        )?;
+        let tracks = statement
+            .query_map(params![limit, offset], map_track)?
+            .collect();
+        tracks
+    }
+
     pub fn list_albums(&self, limit: u32, offset: u32) -> Result<Vec<Album>> {
         let mut statement = self.connection.prepare(
             "SELECT a.id, a.name, NULLIF(a.album_artist, ''), a.year,
@@ -380,6 +395,37 @@ impl Db {
         )?;
         let tracks = statement.query_map([album_id], map_track)?.collect();
         tracks
+    }
+
+    pub fn artist_tracks(&self, artist_id: i64, limit: u32, offset: u32) -> Result<Vec<Track>> {
+        let mut statement = self.connection.prepare(
+            "SELECT id, folder_id, path, size, mtime, title, artist, album_artist,
+                    album, track_no, disc_no, year, genre, duration_ms, has_art, added_at
+             FROM tracks
+             WHERE artist_id = ?1
+             ORDER BY album COLLATE NOCASE, COALESCE(disc_no, 1),
+                      COALESCE(track_no, 2147483647), title COLLATE NOCASE, id
+             LIMIT ?2 OFFSET ?3",
+        )?;
+        let tracks = statement
+            .query_map(params![artist_id, limit, offset], map_track)?
+            .collect();
+        tracks
+    }
+
+    pub fn album_art_source(&self, album_id: i64) -> Result<Option<String>> {
+        match self.connection.query_row(
+            "SELECT path FROM tracks
+             WHERE album_id = ?1 AND has_art = 1
+             ORDER BY COALESCE(disc_no, 1), COALESCE(track_no, 2147483647), id
+             LIMIT 1",
+            [album_id],
+            |row| row.get(0),
+        ) {
+            Ok(path) => Ok(Some(path)),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+            Err(error) => Err(error),
+        }
     }
 
     /// Play queue for a single track: its album in album order and the

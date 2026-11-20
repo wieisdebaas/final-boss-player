@@ -28,8 +28,11 @@ pub enum Command {
     },
     Query {
         kind: String,
+        #[serde(default)]
         q: String,
+        #[serde(default = "default_query_limit")]
         limit: u32,
+        #[serde(default)]
         offset: u32,
     },
     Play {
@@ -57,6 +60,10 @@ pub enum Command {
     GetArt {
         album_id: i64,
     },
+}
+
+fn default_query_limit() -> u32 {
+    100
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

@@ -1,3 +1,4 @@
+pub mod art;
 pub mod db;
 pub mod meta;
 mod paths;
@@ -30,5 +31,11 @@ async fn main() -> Result<()> {
     }
 
     paths.ensure()?;
-    server::run_with_db(&paths.socket_path, paths.db_path, AppState::new()).await
+    server::run_with_paths(
+        &paths.socket_path,
+        paths.db_path,
+        paths.art_dir,
+        AppState::new(),
+    )
+    .await
 }

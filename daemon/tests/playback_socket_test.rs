@@ -1,4 +1,7 @@
 #[allow(dead_code)]
+#[path = "../src/art.rs"]
+mod art;
+#[allow(dead_code)]
 #[path = "../src/db.rs"]
 mod db;
 #[allow(dead_code)]
@@ -144,6 +147,7 @@ async fn play_next_pause_and_persist_over_the_socket_without_audio_hardware() {
         );
     }
     let album_id = database.list_albums(10, 0).unwrap()[0].id;
+    let artist_id = database.list_artists(10, 0).unwrap()[0].id;
 
     let app_state = state::AppState::new();
     let log = Arc::new(Mutex::new(Log::default()));
@@ -172,6 +176,30 @@ async fn play_next_pause_and_persist_over_the_socket_without_audio_hardware() {
         writer,
         next_id: 0,
     };
+
+    for kind in ["tracks", "albums", "artists"] {
+        let response = client.call(json!({ "cmd": "query", "kind": kind })).await;
+        assert_eq!(response["ok"], true, "{response}");
+        assert!(!response["result"].as_array().unwrap().is_empty());
+    }
+    let search = client
+        .call(json!({ "cmd": "query", "kind": "search", "q": "Track 2" }))
+        .await;
+    assert_eq!(search["result"][0]["title"], "Track 2");
+    let album = client
+        .call(json!({ "cmd": "query", "kind": "album", "q": album_id.to_string() }))
+        .await;
+    assert_eq!(album["result"].as_array().unwrap().len(), 3);
+    let artist = client
+        .call(json!({ "cmd": "query", "kind": "artist", "q": artist_id.to_string() }))
+        .await;
+    assert_eq!(artist["result"].as_array().unwrap().len(), 3);
+    let home = client.call(json!({ "cmd": "query", "kind": "home" })).await;
+    assert_eq!(home["result"]["stats"]["tracks"], 3);
+    let art = client
+        .call(json!({ "cmd": "get_art", "album_id": album_id }))
+        .await;
+    assert_eq!(art["error"]["code"], "not_found");
 
     // play: album queue starting at the second track.
     let response = client

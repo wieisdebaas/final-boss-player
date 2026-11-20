@@ -76,12 +76,25 @@ pub async fn run(socket_path: &Path, state: AppState) -> Result<()> {
 }
 
 pub async fn serve(listener: UnixListener, state: AppState) -> Result<()> {
-    serve_context(listener, ServerContext::new(state, None, None)).await
+    serve_context(listener, ServerContext::new(state, None, None, None)).await
 }
 
 /// Serves with the real audio engine. Playback position is persisted next to
 /// the database in the state directory.
 pub async fn run_with_db(socket_path: &Path, db_path: PathBuf, state: AppState) -> Result<()> {
+    let art_dir = db_path
+        .parent()
+        .unwrap_or_else(|| Path::new("."))
+        .join("art");
+    run_with_paths(socket_path, db_path, art_dir, state).await
+}
+
+pub async fn run_with_paths(
+    socket_path: &Path,
+    db_path: PathBuf,
+    art_dir: PathBuf,
+    state: AppState,
+) -> Result<()> {
     let state_dir = db_path.parent().map(Path::to_path_buf);
     let persist_path = state_dir.map(|dir| dir.join(PLAYBACK_FILE));
     let restore = persist_path
@@ -96,7 +109,7 @@ pub async fn run_with_db(socket_path: &Path, db_path: PathBuf, state: AppState) 
     let listener = bind(socket_path)?;
     serve_context(
         listener,
-        ServerContext::new(state, Some(db_path), Some(player)),
+        ServerContext::new(state, Some(db_path), Some(art_dir), Some(player)),
     )
     .await
 }
@@ -108,9 +121,13 @@ pub async fn serve_with_player(
     db_path: PathBuf,
     player: Player,
 ) -> Result<()> {
+    let art_dir = db_path
+        .parent()
+        .unwrap_or_else(|| Path::new("."))
+        .join("art");
     serve_context(
         listener,
-        ServerContext::new(state, Some(db_path), Some(player)),
+        ServerContext::new(state, Some(db_path), Some(art_dir), Some(player)),
     )
     .await
 }
@@ -154,14 +171,21 @@ fn queue_item(track: &crate::db::Track) -> QueueItem {
 struct ServerContext {
     state: AppState,
     db_path: Option<PathBuf>,
+    art_dir: Option<PathBuf>,
     player: Option<Player>,
 }
 
 impl ServerContext {
-    fn new(state: AppState, db_path: Option<PathBuf>, player: Option<Player>) -> Self {
+    fn new(
+        state: AppState,
+        db_path: Option<PathBuf>,
+        art_dir: Option<PathBuf>,
+        player: Option<Player>,
+    ) -> Self {
         Self {
             state,
             db_path,
+            art_dir,
             player,
         }
     }
@@ -255,6 +279,8 @@ async fn dispatch(line: &str, context: &ServerContext) -> ServerMessage {
                 | "add_folder"
                 | "remove_folder"
                 | "rescan"
+                | "query"
+                | "get_art"
                 | "play"
                 | "play_album"
                 | "pause"
@@ -288,6 +314,13 @@ async fn dispatch(line: &str, context: &ServerContext) -> ServerMessage {
         Command::AddFolder { path } => add_folder(request.id, context, path).await,
         Command::RemoveFolder { path } => remove_folder(request.id, context, path).await,
         Command::Rescan { full } => rescan(request.id, context, full).await,
+        Command::Query {
+            kind,
+            q,
+            limit,
+            offset,
+        } => query(request.id, context, kind, q, limit, offset).await,
+        Command::GetArt { album_id } => get_art(request.id, context, album_id).await,
         Command::Play { track_id } => play_track(request.id, context, track_id).await,
         Command::PlayAlbum { album_id } => play_album(request.id, context, album_id).await,
         Command::Pause => playback(request.id, context, Cmd::Pause).await,
@@ -302,7 +335,92 @@ async fn dispatch(line: &str, context: &ServerContext) -> ServerMessage {
             playback(request.id, context, Cmd::SetShuffle(enabled)).await
         }
         Command::SetRepeat { mode } => playback(request.id, context, Cmd::SetRepeat(mode)).await,
-        _ => error_response(request.id, "unknown_command", "command is not supported"),
+    }
+}
+
+async fn query(
+    id: u64,
+    context: &ServerContext,
+    kind: String,
+    q: String,
+    limit: u32,
+    offset: u32,
+) -> ServerMessage {
+    let Some(db_path) = context.db_path.clone() else {
+        return error_response(id, "unavailable", "library database is not configured");
+    };
+    let limit = limit.min(500);
+    let result = tokio::task::spawn_blocking(move || -> Result<Value> {
+        let db = crate::db::Db::open(db_path)?;
+        match kind.as_str() {
+            "tracks" => Ok(serde_json::to_value(db.list_tracks(limit, offset)?)?),
+            "albums" => Ok(serde_json::to_value(db.list_albums(limit, offset)?)?),
+            "artists" => Ok(serde_json::to_value(db.list_artists(limit, offset)?)?),
+            "search" => Ok(serde_json::to_value(db.search(&q, limit, offset)?)?),
+            "home" => Ok(json!({
+                "stats": db.stats()?,
+                "tracks": db.list_tracks(limit, offset)?,
+                "albums": db.list_albums(limit, offset)?,
+                "artists": db.list_artists(limit, offset)?,
+            })),
+            "album" => {
+                let album_id = parse_query_id(&q, "album")?;
+                let tracks = db.album_tracks(album_id)?;
+                Ok(serde_json::to_value(page(tracks, limit, offset))?)
+            }
+            "artist" => {
+                let artist_id = parse_query_id(&q, "artist")?;
+                Ok(serde_json::to_value(
+                    db.artist_tracks(artist_id, limit, offset)?,
+                )?)
+            }
+            _ => bail!("unsupported query kind: {kind}"),
+        }
+    })
+    .await;
+
+    match result {
+        Ok(Ok(value)) => ok_response(id, Some(value)),
+        Ok(Err(error)) => error_response(id, "invalid_query", error.to_string()),
+        Err(error) => error_response(id, "internal_error", error.to_string()),
+    }
+}
+
+fn parse_query_id(q: &str, entity: &str) -> Result<i64> {
+    q.parse()
+        .with_context(|| format!("{entity} query requires a numeric id"))
+}
+
+fn page<T>(items: Vec<T>, limit: u32, offset: u32) -> Vec<T> {
+    items
+        .into_iter()
+        .skip(offset as usize)
+        .take(limit as usize)
+        .collect()
+}
+
+async fn get_art(id: u64, context: &ServerContext, album_id: i64) -> ServerMessage {
+    let (Some(db_path), Some(art_dir)) = (context.db_path.clone(), context.art_dir.clone()) else {
+        return error_response(id, "unavailable", "artwork cache is not configured");
+    };
+    let result = tokio::task::spawn_blocking(move || -> Result<Option<PathBuf>> {
+        let db = crate::db::Db::open(db_path)?;
+        let Some(source) = db.album_art_source(album_id)? else {
+            return Ok(None);
+        };
+        Ok(Some(crate::art::get_or_create(
+            &art_dir,
+            album_id,
+            Path::new(&source),
+        )?))
+    })
+    .await;
+
+    match result {
+        Ok(Ok(Some(path))) => ok_response(id, Some(json!({ "path": path }))),
+        Ok(Ok(None)) => error_response(id, "not_found", "album has no embedded artwork"),
+        Ok(Err(error)) => error_response(id, "art_error", error.to_string()),
+        Err(error) => error_response(id, "internal_error", error.to_string()),
     }
 }
 
