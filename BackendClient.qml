@@ -119,7 +119,13 @@ Item {
         onRead: function(line) { root.handleLine(line) }
       }
       onConnectionStateChanged: {
-        if (connected) root.send("hello", null, null)
+        if (connected) {
+          root.send("hello", null, null)
+          root.send("ping", null, function(ok, result, error) {
+            if (!ok && root.activeSocket)
+              root.activeSocket.connected = false
+          })
+        }
       }
     }
   }

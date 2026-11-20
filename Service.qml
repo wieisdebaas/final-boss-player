@@ -100,7 +100,11 @@ Item {
     return request("add_folder", { path: String(path || "") }, callback)
   }
   function removeFolder(path, callback) {
-    return request("remove_folder", { path: String(path || "") }, callback)
+    return request("remove_folder", { path: String(path || "") },
+      function(ok, result, error) {
+        if (ok) root.libraryRevision++
+        if (typeof callback === "function") callback(ok, result, error)
+      })
   }
   function rescan(full, callback) {
     return request("rescan", { full: full === true }, callback)

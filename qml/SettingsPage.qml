@@ -133,6 +133,7 @@ Item {
         }
         MouseArea {
           anchors.fill: parent
+          enabled: root.service && root.service.connected
           cursorShape: Qt.PointingHandCursor
           onClicked: root.submitFolder()
         }
@@ -190,6 +191,7 @@ Item {
         }
         MouseArea {
           anchors.fill: parent
+          enabled: root.service && root.service.connected && !root.service.scanning
           cursorShape: Qt.PointingHandCursor
           onClicked: if (root.service) root.service.rescan(false, function(ok, result, error) {
             root.report(ok, error, "Rescan started")
