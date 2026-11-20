@@ -167,8 +167,11 @@ Rectangle {
         Text {
           id: footerAlbum
           elide: Text.ElideRight
-          width: Math.max(0, footerByline.width - footerArtist.width
-            - (footerSep.visible ? footerSep.width : 0))
+          // Text-sized hit box only — do not stretch across leftover row width.
+          width: Math.min(
+            implicitWidth,
+            Math.max(0, footerByline.width - footerArtist.width
+              - (footerSep.visible ? footerSep.width : 0)))
           color: footerAlbumArea.containsMouse ? Color.accent : Color.muted
           font.pixelSize: 12
           font.underline: footerAlbumArea.containsMouse

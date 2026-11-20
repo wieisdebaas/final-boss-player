@@ -3,7 +3,8 @@ import QtQuick
 import QtQuick.Controls
 import qs.Commons
 
-// Reusable track rows. Title click plays/toggles; artist and album open those pages.
+// Reusable track rows. Row / title click plays/toggles; artist and album
+// links only activate when the pointer is over their text.
 ListView {
   id: root
 
@@ -48,16 +49,19 @@ ListView {
     width: ListView.view.width
     height: 44
     radius: 6
-    color: rowHover.containsMouse
+    color: rowArea.containsMouse
       ? Qt.rgba(Color.foreground.r, Color.foreground.g, Color.foreground.b, 0.08)
       : "transparent"
 
-    // Soft hover highlight without stealing clicks from nested links.
+    // Whole-row click plays the title. Artist/album only steal events when
+    // the pointer is over their actual text (not the empty remainder of the row).
     MouseArea {
-      id: rowHover
+      id: rowArea
       anchors.fill: parent
       hoverEnabled: true
-      acceptedButtons: Qt.NoButton
+      cursorShape: Qt.PointingHandCursor
+      onClicked: if (root.service)
+        root.service.playOrToggle(Number(row.modelData.id), null)
     }
 
     Row {
@@ -65,6 +69,8 @@ ListView {
       anchors.leftMargin: 10
       anchors.rightMargin: 14
       spacing: 12
+      // Let rowArea receive clicks in empty space; nested areas still win on top.
+      z: 1
 
       Text {
         width: 28
@@ -91,12 +97,6 @@ ListView {
           color: row.isCurrent ? Color.accent : Color.foreground
           font.pixelSize: 13
           text: String(row.modelData.title || "Untitled")
-          MouseArea {
-            anchors.fill: parent
-            cursorShape: Qt.PointingHandCursor
-            onClicked: if (root.service)
-              root.service.playOrToggle(Number(row.modelData.id), null)
-          }
         }
 
         Row {
@@ -108,6 +108,7 @@ ListView {
             id: artistLink
             elide: Text.ElideRight
             maximumLineCount: 1
+            // Hit box = painted text only (capped so long names don't crush album).
             width: Math.min(implicitWidth, byline.width * 0.5)
             color: artistArea.containsMouse ? Color.accent : Color.muted
             font.pixelSize: 11
@@ -136,8 +137,11 @@ ListView {
             id: albumLink
             elide: Text.ElideRight
             maximumLineCount: 1
-            width: Math.max(0, byline.width - artistLink.width
-              - (bylineSep.visible ? bylineSep.width : 0))
+            // Same as artist: only as wide as the label, not the rest of the row.
+            width: Math.min(
+              implicitWidth,
+              Math.max(0, byline.width - artistLink.width
+                - (bylineSep.visible ? bylineSep.width : 0)))
             color: albumArea.containsMouse ? Color.accent : Color.muted
             font.pixelSize: 11
             font.underline: albumArea.containsMouse
