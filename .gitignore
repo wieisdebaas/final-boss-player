@@ -1,5 +1,21 @@
+# Tooling / local worktrees
 .worktrees/
 .superpowers/
+
+# Rust
 daemon/target/
+
+# Local indexes / caches (never commit)
 *.sqlite
 *.sqlite-*
+*.db
+
+# Editors / OS
+.DS_Store
+*.swp
+*~
+.idea/
+.vscode/
+
+# Scratch dumps outside tracked images/
+img/

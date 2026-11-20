@@ -1,0 +1,44 @@
+{
+  "schemaVersion": 1,
+  "id": "io.github.finalboss.player",
+  "name": "Final Boss Player",
+  "version": "0.1.0",
+  "author": "Robin Smits",
+  "license": "MIT",
+  "homepage": "https://github.com/wieisdebaas/finalboss-player",
+  "description": "Stream your NAS and local music library from the Omarchy bar and panel.",
+  "icon": "icon.png",
+  "kinds": [
+    "service",
+    "bar-widget",
+    "panel"
+  ],
+  "activation": "on-demand",
+  "entryPoints": {
+    "service": "Service.qml",
+    "barWidget": "BarWidget.qml",
+    "panel": "Panel.qml"
+  },
+  "barWidget": {
+    "displayName": "Final Boss Player",
+    "description": "Local / NAS music library and player (finalbossd).",
+    "category": "Media",
+    "aliases": [
+      "music",
+      "player",
+      "finalboss",
+      "final boss",
+      "nas",
+      "audio",
+      "library",
+      "mpris",
+      "flac",
+      "local-music",
+      "endboss",
+      "end boss",
+      "eindbaas"
+    ],
+    "allowMultiple": false,
+    "defaultSection": "left"
+  }
+}

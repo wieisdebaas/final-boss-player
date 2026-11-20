@@ -1,0 +1,14 @@
+[Unit]
+Description=Final Boss Player music daemon (finalbossd)
+Documentation=https://github.com/finalboss/finalboss-player
+# Rendered by scripts/install.sh: @BINARY@ is replaced with the installed path.
+
+[Service]
+Type=simple
+ExecStart=@BINARY@
+Restart=on-failure
+RestartSec=2
+Environment=RUST_LOG=finalbossd=info
+
+[Install]
+WantedBy=default.target

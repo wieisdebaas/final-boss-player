@@ -21,7 +21,7 @@ BarWidget ←→ Service.qml ←→ Panel.qml
                  │
                  │ versioned JSON-RPC (Unix socket)
                  ▼
-            endbossd (systemd --user)
+            finalbossd (systemd --user)
          scan │ SQLite │ art thumbs │ player
                  │
                  ▼
@@ -31,9 +31,9 @@ BarWidget ←→ Service.qml ←→ Panel.qml
 | Piece | Role |
 | --- | --- |
 | **QML plugin** | UI, navigation, shortcuts, theme. No NAS walks. |
-| **endbossd** | Source of truth: library index, scan, playback, errors. |
-| **State** | `~/.local/state/endboss/` (DB, settings, last position) |
-| **Cache** | `~/.cache/endboss/art/` (small thumbs only) |
+| **finalbossd** | Source of truth: library index, scan, playback, errors. |
+| **State** | `~/.local/state/finalboss/` (DB, settings, last position) |
+| **Cache** | `~/.cache/finalboss/art/` (small thumbs only) |
 
 Playback continues if the panel closes. On Quickshell restart, UI reconnects and loads a state snapshot from the daemon; audio does not stop.
 
@@ -71,7 +71,7 @@ Core shortcuts (OmaSpotify-like): Space, Ctrl+Left/Right, Shift+Left/Right seek,
 
 ## Packaging
 
-Omarchy plugin (`service` + `bar-widget` + `panel`) plus `endbossd` binary and user unit. Develop in this repo; install/symlink into Omarchy plugins for use.
+Omarchy plugin (`service` + `bar-widget` + `panel`) plus `finalbossd` binary and user unit. Develop in this repo; install/symlink into Omarchy plugins for use.
 
 ## Success criteria
 
