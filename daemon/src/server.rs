@@ -1,28 +1,71 @@
 use std::fs;
-use std::os::unix::fs::PermissionsExt;
+use std::io::ErrorKind;
+use std::os::unix::fs::{FileTypeExt, PermissionsExt};
+use std::os::unix::net::UnixStream as StdUnixStream;
 use std::path::Path;
+use std::sync::Mutex;
 
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
 use serde_json::{json, Value};
 use tokio::io::{AsyncBufReadExt, AsyncWrite, AsyncWriteExt, BufReader};
 use tokio::net::{UnixListener, UnixStream};
+use tokio::sync::broadcast;
 
 use crate::protocol::{
     parse_client_message, Command, ProtocolError, ServerMessage, PROTOCOL_VERSION,
 };
 use crate::state::AppState;
 
+static UMASK_LOCK: Mutex<()> = Mutex::new(());
+
 pub fn bind(socket_path: &Path) -> Result<UnixListener> {
-    if socket_path.exists() {
-        fs::remove_file(socket_path)
-            .with_context(|| format!("could not remove stale socket {}", socket_path.display()))?;
+    match fs::symlink_metadata(socket_path) {
+        Ok(metadata) if !metadata.file_type().is_socket() => {
+            bail!(
+                "refusing to replace non-socket path {}",
+                socket_path.display()
+            );
+        }
+        Ok(_) => match StdUnixStream::connect(socket_path) {
+            Ok(_) => bail!("socket {} is already in use", socket_path.display()),
+            Err(error) if error.kind() == ErrorKind::ConnectionRefused => {
+                fs::remove_file(socket_path).with_context(|| {
+                    format!("could not remove stale socket {}", socket_path.display())
+                })?;
+            }
+            Err(error) => {
+                return Err(error).with_context(|| {
+                    format!(
+                        "could not determine whether {} is stale",
+                        socket_path.display()
+                    )
+                });
+            }
+        },
+        Err(error) if error.kind() == ErrorKind::NotFound => {}
+        Err(error) => {
+            return Err(error)
+                .with_context(|| format!("could not inspect {}", socket_path.display()));
+        }
     }
 
-    let listener = UnixListener::bind(socket_path)
-        .with_context(|| format!("could not bind {}", socket_path.display()))?;
+    let listener = bind_with_user_umask(socket_path)?;
     fs::set_permissions(socket_path, fs::Permissions::from_mode(0o600))
         .with_context(|| format!("could not secure {}", socket_path.display()))?;
     Ok(listener)
+}
+
+fn bind_with_user_umask(socket_path: &Path) -> Result<UnixListener> {
+    let _guard = UMASK_LOCK
+        .lock()
+        .map_err(|_| anyhow::anyhow!("socket umask lock was poisoned"))?;
+    // umask is process-wide, so serialize the narrow create-and-restore section.
+    let previous_umask = unsafe { libc::umask(0o077) };
+    let result = UnixListener::bind(socket_path);
+    unsafe {
+        libc::umask(previous_umask);
+    }
+    result.with_context(|| format!("could not bind {}", socket_path.display()))
 }
 
 pub async fn run(socket_path: &Path, state: AppState) -> Result<()> {
@@ -76,7 +119,7 @@ async fn handle_client(stream: UnixStream, state: AppState) -> Result<()> {
                         ).await?;
                     }
                     Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => {
-                        let snapshot = state.snapshot().await;
+                        let snapshot = recover_after_lag(&mut changes, &state).await;
                         write_message(
                             &mut writer,
                             &ServerMessage::Event {
@@ -90,6 +133,21 @@ async fn handle_client(stream: UnixStream, state: AppState) -> Result<()> {
             }
         }
     }
+}
+
+pub(crate) async fn recover_after_lag(
+    changes: &mut broadcast::Receiver<crate::protocol::PlayerState>,
+    state: &AppState,
+) -> crate::protocol::PlayerState {
+    loop {
+        match changes.try_recv() {
+            Ok(_) | Err(broadcast::error::TryRecvError::Lagged(_)) => {}
+            Err(broadcast::error::TryRecvError::Empty | broadcast::error::TryRecvError::Closed) => {
+                break
+            }
+        }
+    }
+    state.snapshot().await
 }
 
 async fn dispatch(line: &str, state: &AppState) -> ServerMessage {
@@ -152,7 +210,12 @@ async fn write_message(
     writer: &mut (impl AsyncWrite + Unpin),
     message: &ServerMessage,
 ) -> Result<()> {
-    let mut encoded = serde_json::to_vec(message)?;
+    let mut value = serde_json::to_value(message)?;
+    value
+        .as_object_mut()
+        .expect("server messages serialize as JSON objects")
+        .insert("v".into(), json!(PROTOCOL_VERSION));
+    let mut encoded = serde_json::to_vec(&value)?;
     encoded.push(b'\n');
     writer.write_all(&encoded).await?;
     Ok(())

@@ -181,6 +181,7 @@ dependencies = [
  "anyhow",
  "clap",
  "directories",
+ "libc",
  "rusqlite",
  "serde",
  "serde_json",
