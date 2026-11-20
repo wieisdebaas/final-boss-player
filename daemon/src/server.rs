@@ -139,14 +139,7 @@ pub(crate) async fn recover_after_lag(
     changes: &mut broadcast::Receiver<crate::protocol::PlayerState>,
     state: &AppState,
 ) -> crate::protocol::PlayerState {
-    loop {
-        match changes.try_recv() {
-            Ok(_) | Err(broadcast::error::TryRecvError::Lagged(_)) => {}
-            Err(broadcast::error::TryRecvError::Empty | broadcast::error::TryRecvError::Closed) => {
-                break
-            }
-        }
-    }
+    while let Ok(_) | Err(broadcast::error::TryRecvError::Lagged(_)) = changes.try_recv() {}
     state.snapshot().await
 }
 
