@@ -29,6 +29,20 @@ support.
 | **Daemon** | `finalbossd` |
 | **License** | MIT |
 
+## Screenshots
+
+The library panel, with the track list and the player bar along the bottom.
+
+<p align="center">
+  <img src="images/screenshot-library.jpg" alt="Final Boss Player library with the track list and player bar" width="720" />
+</p>
+
+The bar mini-player, opened from the shell bar while a track is playing.
+
+<p align="center">
+  <img src="images/screenshot-bar.jpg" alt="Final Boss Player bar mini-player showing the current track" width="640" />
+</p>
+
 ## Install (Omarchy)
 
 Requires [Omarchy](https://omarchy.org/) (Quickshell shell), a Rust toolchain
