@@ -10,6 +10,9 @@ pub struct AppState {
     current: Arc<RwLock<PlayerState>>,
     changes: broadcast::Sender<PlayerState>,
     scan_cancel: Arc<Mutex<Option<Arc<AtomicBool>>>>,
+    /// Held for the whole lifetime of a scan task and by folder removal, so
+    /// `remove_folder` can wait for a cancelled scan to stop writing.
+    scan_gate: Arc<tokio::sync::Mutex<()>>,
 }
 
 impl AppState {
@@ -19,7 +22,12 @@ impl AppState {
             current: Arc::new(RwLock::new(initial_player_state())),
             changes,
             scan_cancel: Arc::new(Mutex::new(None)),
+            scan_gate: Arc::new(tokio::sync::Mutex::new(())),
         }
+    }
+
+    pub async fn acquire_scan_gate(&self) -> tokio::sync::OwnedMutexGuard<()> {
+        self.scan_gate.clone().lock_owned().await
     }
 
     pub async fn snapshot(&self) -> PlayerState {

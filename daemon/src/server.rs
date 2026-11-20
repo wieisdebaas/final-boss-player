@@ -232,7 +232,12 @@ async fn remove_folder(id: u64, context: &ServerContext, path: String) -> Server
     let Some(db_path) = context.db_path.clone() else {
         return error_response(id, "unavailable", "library database is not configured");
     };
+    // Cancel, then wait for any in-flight scan task to release the gate (it
+    // holds it until it has stopped writing). Holding the gate ourselves keeps
+    // a queued scan from starting until the folder is gone; a scan that was
+    // cancelled before it started sees its flag and exits without touching the DB.
     context.state.cancel_scan();
+    let _scan_gate = context.state.acquire_scan_gate().await;
     context.state.finish_scan().await;
     let result = tokio::task::spawn_blocking(move || -> Result<_> {
         let db = crate::db::Db::open(db_path)?;
@@ -284,6 +289,10 @@ async fn rescan(id: u64, context: &ServerContext, full: bool) -> ServerMessage {
 fn spawn_scans(db_path: PathBuf, state: AppState, folders: Vec<PathBuf>, full: bool) {
     let cancel = state.begin_scan();
     tokio::spawn(async move {
+        let _scan_gate = state.acquire_scan_gate().await;
+        if cancel.load(std::sync::atomic::Ordering::Relaxed) {
+            return;
+        }
         if folders.is_empty() {
             state
                 .update_scan(scan::ScanProgress {
@@ -304,10 +313,9 @@ fn spawn_scans(db_path: PathBuf, state: AppState, folders: Vec<PathBuf>, full: b
             let result = tokio::task::spawn_blocking(move || -> Result<_> {
                 let db = crate::db::Db::open(scan_path)?;
                 scan::run(db, &folder, full, scan_cancel, move |progress| {
-                    let progress_state = scan_state.clone();
-                    runtime.spawn(async move {
-                        progress_state.update_scan(progress).await;
-                    });
+                    // Synchronous so no progress update can land after the scan
+                    // (and its gate) has finished.
+                    runtime.block_on(scan_state.update_scan(progress));
                 })
             })
             .await;
@@ -319,6 +327,9 @@ fn spawn_scans(db_path: PathBuf, state: AppState, folders: Vec<PathBuf>, full: b
                 Ok(result) if result.cancelled => break,
                 Ok(_) => {}
                 Err(error) => {
+                    if cancel.load(std::sync::atomic::Ordering::Relaxed) {
+                        return;
+                    }
                     state.set_scan_error(error.to_string()).await;
                     return;
                 }

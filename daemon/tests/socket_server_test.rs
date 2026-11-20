@@ -159,3 +159,102 @@ fn player_state(generation: u64) -> PlayerState {
         ..state::initial_player_state()
     }
 }
+
+#[tokio::test]
+async fn remove_folder_waits_for_scan_and_leaves_no_trace() {
+    let temp = tempdir().unwrap();
+    let music = temp.path().join("music");
+    std::fs::create_dir(&music).unwrap();
+    for index in 0..5 {
+        write_wave(&music.join(format!("track {index}.wav")));
+    }
+    let socket_path = temp.path().join("backend.sock");
+    let db_path = temp.path().join("library.sqlite");
+    let server_socket = socket_path.clone();
+    let server_db = db_path.clone();
+    let task = tokio::spawn(async move {
+        server::run_with_db(&server_socket, server_db, state::AppState::new()).await
+    });
+    for _ in 0..200 {
+        if socket_path.exists() {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+    }
+
+    let stream = UnixStream::connect(&socket_path).await.unwrap();
+    let (reader, mut writer) = stream.into_split();
+    let mut lines = BufReader::new(reader).lines();
+
+    // Remove immediately after each add, while the scan is queued or running.
+    for id in 1..=5_u64 {
+        let add = format!(
+            "{{\"v\":1,\"id\":{id},\"cmd\":\"add_folder\",\"path\":{}}}\n",
+            serde_json::to_string(&music.to_string_lossy()).unwrap()
+        );
+        writer.write_all(add.as_bytes()).await.unwrap();
+        let remove = format!(
+            "{{\"v\":1,\"id\":{},\"cmd\":\"remove_folder\",\"path\":{}}}\n",
+            id + 100,
+            serde_json::to_string(&music.canonicalize().unwrap().to_string_lossy()).unwrap()
+        );
+        writer.write_all(remove.as_bytes()).await.unwrap();
+        let remove_id = id + 100;
+        loop {
+            let value: serde_json::Value =
+                serde_json::from_str(&lines.next_line().await.unwrap().unwrap()).unwrap();
+            if value["id"] == remove_id {
+                assert_eq!(value["ok"], true, "{value}");
+                break;
+            }
+        }
+
+        // Once remove_folder has answered, no stale scan may bring the folder back.
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+        let db = db::Db::open(&db_path).unwrap();
+        let stats = db.stats().unwrap();
+        assert_eq!((stats.folders, stats.tracks), (0, 0), "round {id}");
+    }
+
+    task.abort();
+}
+
+fn write_wave(path: &std::path::Path) {
+    let data = vec![128_u8; 8_000];
+    let mut wave = Vec::with_capacity(44 + data.len());
+    wave.extend_from_slice(b"RIFF");
+    wave.extend_from_slice(&(36_u32 + data.len() as u32).to_le_bytes());
+    wave.extend_from_slice(b"WAVEfmt ");
+    wave.extend_from_slice(&16_u32.to_le_bytes());
+    wave.extend_from_slice(&1_u16.to_le_bytes());
+    wave.extend_from_slice(&1_u16.to_le_bytes());
+    wave.extend_from_slice(&8_000_u32.to_le_bytes());
+    wave.extend_from_slice(&8_000_u32.to_le_bytes());
+    wave.extend_from_slice(&1_u16.to_le_bytes());
+    wave.extend_from_slice(&8_u16.to_le_bytes());
+    wave.extend_from_slice(b"data");
+    wave.extend_from_slice(&(data.len() as u32).to_le_bytes());
+    wave.extend_from_slice(&data);
+    std::fs::write(path, wave).unwrap();
+}
+
+#[tokio::test]
+async fn scan_gate_makes_removal_wait_for_active_scan() {
+    let state = state::AppState::new();
+    let gate = state.acquire_scan_gate().await;
+    let waiting = state.clone();
+    let mut waiter = tokio::spawn(async move {
+        let _gate = waiting.acquire_scan_gate().await;
+    });
+
+    assert!(
+        tokio::time::timeout(std::time::Duration::from_millis(50), &mut waiter)
+            .await
+            .is_err()
+    );
+    drop(gate);
+    tokio::time::timeout(std::time::Duration::from_secs(1), waiter)
+        .await
+        .unwrap()
+        .unwrap();
+}
