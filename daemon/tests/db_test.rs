@@ -44,6 +44,39 @@ fn inserts_a_track_and_finds_it_by_title() {
 }
 
 #[test]
+fn comma_separated_terms_must_all_match() {
+    let temp = tempdir().unwrap();
+    let db = Db::open(temp.path().join("library.sqlite")).unwrap();
+    let folder_id = db.upsert_folder("/music", None).unwrap();
+
+    let mut shady = track(folder_id, "/music/my-name-is.flac", "My Name Is");
+    shady.artist = Some("Eminem".into());
+    shady.album_artist = Some("Eminem".into());
+    shady.album = Some("The Slim Shady LP".into());
+    db.upsert_track(&shady).unwrap();
+
+    let mut marshall = track(folder_id, "/music/real-slim-shady.flac", "The Real Slim Shady");
+    marshall.artist = Some("Eminem".into());
+    marshall.album_artist = Some("Eminem".into());
+    marshall.album = Some("The Marshall Mathers LP".into());
+    db.upsert_track(&marshall).unwrap();
+
+    let mut other = track(folder_id, "/music/cover.flac", "My Name Is");
+    other.artist = Some("Someone Else".into());
+    other.album_artist = Some("Someone Else".into());
+    other.album = Some("The Slim Shady LP".into());
+    db.upsert_track(&other).unwrap();
+
+    let both = db.search("eminem, the slim shady lp", 20, 0).unwrap();
+    assert_eq!(both.len(), 1);
+    assert_eq!(both[0].title, "My Name Is");
+    assert_eq!(both[0].artist.as_deref(), Some("Eminem"));
+
+    assert_eq!(db.search("eminem", 20, 0).unwrap().len(), 2);
+    assert_eq!(db.search("eminem,", 20, 0).unwrap().len(), 2);
+}
+
+#[test]
 fn creates_version_one_schema_and_lists_upserted_folders() {
     let temp = tempdir().unwrap();
     let db = Db::open(temp.path().join("library.sqlite")).unwrap();

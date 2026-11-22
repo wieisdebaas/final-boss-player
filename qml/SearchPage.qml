@@ -99,7 +99,7 @@ Item {
           visible: input.text === ""
           color: Color.muted
           font.pixelSize: 13
-          text: "Search tracks, artists, albums\u2026"
+          text: "Tracks, artists, albums \u2014 separate with commas"
         }
       }
     }

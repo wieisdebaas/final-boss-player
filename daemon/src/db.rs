@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 use std::path::Path;
 
-use rusqlite::{ffi, params, Connection, Result, TransactionBehavior};
+use rusqlite::{ffi, params, params_from_iter, Connection, Result, TransactionBehavior};
 use serde::Serialize;
 
 const SUPPORTED_SCHEMA_VERSION: i64 = 1;
@@ -399,18 +399,44 @@ impl Db {
     }
 
     pub fn search(&self, query: &str, limit: u32, offset: u32) -> Result<Vec<Track>> {
-        let pattern = format!("%{query}%");
-        let mut statement = self.connection.prepare(
+        // Commas split the query. Every term must match somewhere on the track,
+        // so "eminem, the slim shady lp" is that artist and that album.
+        let terms: Vec<&str> = query
+            .split(',')
+            .map(str::trim)
+            .filter(|term| !term.is_empty())
+            .take(8)
+            .collect();
+        let patterns: Vec<String> = terms.iter().map(|term| format!("%{term}%")).collect();
+        let mut sql = String::from(
             "SELECT id, folder_id, path, size, mtime, title, artist, album_artist,
                     album, track_no, disc_no, year, genre, duration_ms, has_art, added_at,
                     album_id, artist_id
-             FROM tracks
-             WHERE title LIKE ?1 OR artist LIKE ?1 OR album_artist LIKE ?1 OR album LIKE ?1
-             ORDER BY title COLLATE NOCASE, id
-             LIMIT ?2 OFFSET ?3",
-        )?;
+             FROM tracks",
+        );
+        for index in 0..patterns.len() {
+            let clause = format!(
+                "(title LIKE ?{0} OR artist LIKE ?{0} OR album_artist LIKE ?{0} OR album LIKE ?{0})",
+                index + 1
+            );
+            if index == 0 {
+                sql.push_str(" WHERE ");
+            } else {
+                sql.push_str(" AND ");
+            }
+            sql.push_str(&clause);
+        }
+        let limit_at = patterns.len() + 1;
+        let offset_at = patterns.len() + 2;
+        sql.push_str(&format!(
+            " ORDER BY title COLLATE NOCASE, id LIMIT ?{limit_at} OFFSET ?{offset_at}"
+        ));
+        let mut statement = self.connection.prepare(&sql)?;
+        let mut binds: Vec<&dyn rusqlite::types::ToSql> = patterns.iter().map(|p| p as _).collect();
+        binds.push(&limit);
+        binds.push(&offset);
         let tracks = statement
-            .query_map(params![pattern, limit, offset], map_track)?
+            .query_map(params_from_iter(binds), map_track)?
             .collect();
         tracks
     }
