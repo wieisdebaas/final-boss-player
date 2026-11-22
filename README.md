@@ -37,6 +37,24 @@ The library panel, with the track list and the player bar along the bottom.
   <img src="images/screenshot-library.jpg" alt="Final Boss Player library with the track list and player bar" width="720" />
 </p>
 
+Artists as a cover grid. The same list/tiles switch is on every page.
+
+<p align="center">
+  <img src="images/screenshot-artist-tiles.jpg" alt="Final Boss Player artists page in tiles view, with cover art and play buttons" width="720" />
+</p>
+
+Albums in the same tiles view, with artwork and a play button on each cover.
+
+<p align="center">
+  <img src="images/screenshot-albums-tiles.jpg" alt="Final Boss Player albums page in tiles view" width="720" />
+</p>
+
+Settings, where a music folder is added, removed, or rescanned.
+
+<p align="center">
+  <img src="images/settings.jpg" alt="Final Boss Player settings with a music folder, Add folder, Remove, and Rescan" width="720" />
+</p>
+
 The bar mini-player, opened from the shell bar while a track is playing.
 
 <p align="center">
