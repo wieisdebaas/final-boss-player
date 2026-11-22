@@ -111,12 +111,55 @@ fn exposes_album_artist_and_library_queries() {
     assert_eq!(albums[0].track_count, 1);
     assert_eq!(artists[0].name, "Final Form");
     assert_eq!(artists[0].track_count, 1);
+    assert!(artists[0].has_art);
+    assert_eq!(
+        db.artist_art_source(artists[0].id).unwrap().as_deref(),
+        Some("/music/Boss Theme.flac")
+    );
     assert_eq!(tracks[0].id, track_id);
     assert_eq!(stats.folders, 1);
     assert_eq!(stats.tracks, 1);
     assert_eq!(stats.albums, 1);
     assert_eq!(stats.artists, 1);
     assert_eq!(stats.plays, 1);
+}
+
+#[test]
+fn artist_art_skips_tracks_without_a_picture() {
+    let temp = tempdir().unwrap();
+    let db = Db::open(temp.path().join("library.sqlite")).unwrap();
+    let folder_id = db.upsert_folder("/music", None).unwrap();
+
+    let mut bare = track(folder_id, "/music/bare.flac", "Bare");
+    bare.has_art = false;
+    bare.track_no = Some(1);
+    db.upsert_track(&bare).unwrap();
+
+    let mut pictured = track(folder_id, "/music/pictured.flac", "Pictured");
+    pictured.track_no = Some(2);
+    db.upsert_track(&pictured).unwrap();
+
+    let artist = &db.list_artists(10, 0).unwrap()[0];
+    assert!(artist.has_art);
+    assert_eq!(
+        db.artist_art_source(artist.id).unwrap().as_deref(),
+        Some("/music/pictured.flac")
+    );
+
+    let mut silent = track(folder_id, "/music/silent.flac", "Silent");
+    silent.artist = Some("No Cover".into());
+    silent.album_artist = Some("No Cover".into());
+    silent.album = Some("Empty".into());
+    silent.has_art = false;
+    db.upsert_track(&silent).unwrap();
+    let no_cover = db
+        .list_artists(10, 0)
+        .unwrap()
+        .into_iter()
+        .find(|artist| artist.name == "No Cover")
+        .unwrap();
+    assert!(!no_cover.has_art);
+    assert_eq!(db.artist_art_source(no_cover.id).unwrap(), None);
 }
 
 #[test]

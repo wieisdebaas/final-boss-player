@@ -49,11 +49,20 @@ Item {
     anchors.margins: 20
     spacing: 8
 
-    Text {
-      color: Color.foreground
-      font.pixelSize: 20
-      font.bold: true
-      text: "Home"
+    RowLayout {
+      Layout.fillWidth: true
+      Text {
+        Layout.fillWidth: true
+        elide: Text.ElideRight
+        color: Color.foreground
+        font.pixelSize: 20
+        font.bold: true
+        text: "Home"
+      }
+      ViewToggle {
+        Layout.alignment: Qt.AlignVCenter
+        service: root.service
+      }
     }
     Text {
       color: root.errorText !== "" ? Color.urgent : Color.muted

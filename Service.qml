@@ -20,6 +20,8 @@ Item {
 
   readonly property var pages: ["home", "search", "library", "artists", "albums", "settings"]
   property string currentPage: "home"
+  // Shared by every page. List rows, or a cover grid.
+  property bool tiles: false
 
   // Drill-down selection for the albums/artists pages (null = show the list).
   property var selectedAlbum: null
@@ -161,6 +163,28 @@ Item {
     }, callback)
   }
 
+  // The daemon caps each query at 500 rows. Keep asking until a short page.
+  function queryPages(kind, q, callback) {
+    var pageLimit = 500
+    var collected = []
+    function take(offset) {
+      root.query(kind, q, pageLimit, offset, function(ok, result, error) {
+        if (!ok) {
+          callback(false, null, error)
+          return
+        }
+        var batch = Array.isArray(result) ? result : []
+        for (var i = 0; i < batch.length; ++i) collected.push(batch[i])
+        if (batch.length === pageLimit) {
+          take(offset + batch.length)
+          return
+        }
+        callback(true, collected, "")
+      })
+    }
+    take(0)
+  }
+
   // scope is "album", "artist", or "library": the queue shuffle and next walk.
   function play(trackId, scope, callback) {
     return request("play", {
@@ -180,6 +204,9 @@ Item {
   }
   function playAlbum(albumId, callback) {
     return request("play_album", { album_id: albumId }, callback)
+  }
+  function playArtist(artistId, callback) {
+    return request("play_artist", { artist_id: artistId }, callback)
   }
   function addFolder(path, callback) {
     return request("add_folder", { path: String(path || "") }, callback)

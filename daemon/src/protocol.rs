@@ -44,6 +44,9 @@ pub enum Command {
     PlayAlbum {
         album_id: i64,
     },
+    PlayArtist {
+        artist_id: i64,
+    },
     Pause,
     Toggle,
     Next,
@@ -62,6 +65,9 @@ pub enum Command {
     },
     GetArt {
         album_id: i64,
+    },
+    GetArtistArt {
+        artist_id: i64,
     },
 }
 

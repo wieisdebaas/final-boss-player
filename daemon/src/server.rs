@@ -313,8 +313,10 @@ async fn dispatch(line: &str, context: &ServerContext) -> ServerMessage {
                 | "rescan"
                 | "query"
                 | "get_art"
+                | "get_artist_art"
                 | "play"
                 | "play_album"
+                | "play_artist"
                 | "pause"
                 | "toggle"
                 | "next"
@@ -353,8 +355,12 @@ async fn dispatch(line: &str, context: &ServerContext) -> ServerMessage {
             offset,
         } => query(request.id, context, kind, q, limit, offset).await,
         Command::GetArt { album_id } => get_art(request.id, context, album_id).await,
+        Command::GetArtistArt { artist_id } => {
+            get_artist_art(request.id, context, artist_id).await
+        }
         Command::Play { track_id, scope } => play_track(request.id, context, track_id, scope).await,
         Command::PlayAlbum { album_id } => play_album(request.id, context, album_id).await,
+        Command::PlayArtist { artist_id } => play_artist(request.id, context, artist_id).await,
         Command::Pause => playback(request.id, context, Cmd::Pause).await,
         Command::Toggle => playback(request.id, context, Cmd::Toggle).await,
         Command::Next => playback(request.id, context, Cmd::Next).await,
@@ -431,6 +437,31 @@ fn page<T>(items: Vec<T>, limit: u32, offset: u32) -> Vec<T> {
         .collect()
 }
 
+async fn get_artist_art(id: u64, context: &ServerContext, artist_id: i64) -> ServerMessage {
+    let (Some(db_path), Some(art_dir)) = (context.db_path.clone(), context.art_dir.clone()) else {
+        return error_response(id, "unavailable", "artwork cache is not configured");
+    };
+    let result = tokio::task::spawn_blocking(move || -> Result<Option<PathBuf>> {
+        let db = crate::db::Db::open(db_path)?;
+        let Some(source) = db.artist_art_source(artist_id)? else {
+            return Ok(None);
+        };
+        Ok(Some(crate::art::get_or_create_artist(
+            &art_dir,
+            artist_id,
+            Path::new(&source),
+        )?))
+    })
+    .await;
+
+    match result {
+        Ok(Ok(Some(path))) => ok_response(id, Some(json!({ "path": path }))),
+        Ok(Ok(None)) => error_response(id, "not_found", "artist has no embedded artwork"),
+        Ok(Err(error)) => error_response(id, "art_error", error.to_string()),
+        Err(error) => error_response(id, "internal_error", error.to_string()),
+    }
+}
+
 async fn get_art(id: u64, context: &ServerContext, album_id: i64) -> ServerMessage {
     let (Some(db_path), Some(art_dir)) = (context.db_path.clone(), context.art_dir.clone()) else {
         return error_response(id, "unavailable", "artwork cache is not configured");
@@ -487,6 +518,14 @@ async fn play_album(id: u64, context: &ServerContext, album_id: i64) -> ServerMe
     .await
 }
 
+async fn play_artist(id: u64, context: &ServerContext, artist_id: i64) -> ServerMessage {
+    play_queue(id, context, "artist".into(), move |db| {
+        let tracks = db.artist_tracks(artist_id, u32::MAX, 0)?;
+        Ok((!tracks.is_empty()).then_some((tracks, 0)))
+    })
+    .await
+}
+
 /// Resolves a queue from the library, then hands it to the player.
 async fn play_queue<F>(id: u64, context: &ServerContext, scope: String, resolve: F) -> ServerMessage
 where
@@ -504,7 +543,9 @@ where
     .await;
     let (tracks, start) = match resolved {
         Ok(Ok(Some(queue))) => queue,
-        Ok(Ok(None)) => return error_response(id, "not_found", "no such track or album"),
+        Ok(Ok(None)) => {
+            return error_response(id, "not_found", "no such track, album, or artist")
+        }
         Ok(Err(error)) => return error_response(id, "database_error", error.to_string()),
         Err(error) => return error_response(id, "internal_error", error.to_string()),
     };

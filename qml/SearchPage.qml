@@ -65,11 +65,20 @@ Item {
     anchors.margins: 20
     spacing: 10
 
-    Text {
-      color: Color.foreground
-      font.pixelSize: 20
-      font.bold: true
-      text: "Search"
+    RowLayout {
+      Layout.fillWidth: true
+      Text {
+        Layout.fillWidth: true
+        elide: Text.ElideRight
+        color: Color.foreground
+        font.pixelSize: 20
+        font.bold: true
+        text: "Search"
+      }
+      ViewToggle {
+        Layout.alignment: Qt.AlignVCenter
+        service: root.service
+      }
     }
 
     Rectangle {

@@ -44,11 +44,24 @@ pub fn cache_path(art_dir: &Path, album_id: i64) -> PathBuf {
     art_dir.join(format!("album-{album_id}.jpg"))
 }
 
+/// Artist thumbnails are cached separately so they never collide with album ids.
+pub fn artist_cache_path(art_dir: &Path, artist_id: i64) -> PathBuf {
+    art_dir.join(format!("artist-{artist_id}.jpg"))
+}
+
 /// Extracts and caches the first embedded picture as a bounded JPEG thumbnail.
 pub fn get_or_create(art_dir: &Path, album_id: i64, source: &Path) -> Result<PathBuf> {
-    let destination = cache_path(art_dir, album_id);
+    write_thumbnail(&cache_path(art_dir, album_id), art_dir, source)
+}
+
+/// Same thumbnail cache as [`get_or_create`], keyed by artist id.
+pub fn get_or_create_artist(art_dir: &Path, artist_id: i64, source: &Path) -> Result<PathBuf> {
+    write_thumbnail(&artist_cache_path(art_dir, artist_id), art_dir, source)
+}
+
+fn write_thumbnail(destination: &Path, art_dir: &Path, source: &Path) -> Result<PathBuf> {
     if destination.is_file() {
-        return Ok(destination);
+        return Ok(destination.to_path_buf());
     }
 
     let picture = read_picture(art_io(), source)?;
@@ -74,12 +87,12 @@ pub fn get_or_create(art_dir: &Path, album_id: i64, source: &Path) -> Result<Pat
     if let Err(error) = fs::rename(&temporary, &destination) {
         let _ = fs::remove_file(&temporary);
         if destination.is_file() {
-            return Ok(destination);
+            return Ok(destination.to_path_buf());
         }
         bail!(
             "could not move artwork thumbnail to {}: {error}",
             destination.display()
         );
     }
-    Ok(destination)
+    Ok(destination.to_path_buf())
 }

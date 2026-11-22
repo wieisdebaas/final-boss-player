@@ -1,5 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
+import QtQuick.Layouts
 import qs.Commons
 
 // Flat track list from the daemon's `query` RPC (kind "tracks").
@@ -12,9 +13,6 @@ Item {
   property bool loading: false
   property string errorText: ""
   property int loadSerial: 0
-  // The daemon returns at most 500 tracks per query. Page until a short page
-  // so the header count and the list are the whole library.
-  readonly property int pageLimit: 500
   readonly property int revision: service ? service.libraryRevision : 0
   readonly property bool connected: service ? service.connected : false
 
@@ -27,56 +25,50 @@ Item {
       return
     }
     loading = true
-    var collected = []
-    function take(offset) {
-      service.query("tracks", "", root.pageLimit, offset, function(ok, result, error) {
-        if (serial !== root.loadSerial) return
-        if (!ok) {
-          root.loading = false
-          root.errorText = error
-          return
-        }
-        var batch = Array.isArray(result) ? result : []
-        for (var i = 0; i < batch.length; ++i) collected.push(batch[i])
-        if (batch.length === root.pageLimit) {
-          take(offset + batch.length)
-          return
-        }
-        root.loading = false
-        root.errorText = ""
-        root.tracks = collected
-      })
-    }
-    take(0)
+    service.queryPages("tracks", "", function(ok, result, error) {
+      if (serial !== root.loadSerial) return
+      root.loading = false
+      root.errorText = ok ? "" : error
+      if (ok) root.tracks = result
+    })
   }
 
   onRevisionChanged: refresh()
   onConnectedChanged: refresh()
   Component.onCompleted: refresh()
 
-  Text {
-    id: titleText
+  RowLayout {
+    id: header
     anchors.top: parent.top
     anchors.left: parent.left
+    anchors.right: parent.right
     anchors.margins: 20
-    color: Color.foreground
-    font.pixelSize: 20
-    font.bold: true
-    text: "Library"
-  }
+    spacing: 12
 
-  Text {
-    anchors.left: titleText.right
-    anchors.leftMargin: 12
-    anchors.baseline: titleText.baseline
-    color: Color.muted
-    font.pixelSize: 12
-    text: root.loading ? "Loading\u2026" : root.tracks.length + " tracks"
+    Text {
+      Layout.fillWidth: true
+      elide: Text.ElideRight
+      color: Color.foreground
+      font.pixelSize: 20
+      font.bold: true
+      text: "Library"
+    }
+
+    Text {
+      color: Color.muted
+      font.pixelSize: 12
+      text: root.loading ? "Loading\u2026" : root.tracks.length + " tracks"
+    }
+
+    ViewToggle {
+      Layout.alignment: Qt.AlignVCenter
+      service: root.service
+    }
   }
 
   TrackList {
     id: list
-    anchors.top: titleText.bottom
+    anchors.top: header.bottom
     anchors.topMargin: 12
     anchors.left: parent.left
     anchors.right: parent.right

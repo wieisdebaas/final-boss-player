@@ -122,6 +122,7 @@ pub struct Artist {
     pub name: String,
     pub album_count: i64,
     pub track_count: i64,
+    pub has_art: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -483,7 +484,8 @@ impl Db {
 
     pub fn list_artists(&self, limit: u32, offset: u32) -> Result<Vec<Artist>> {
         let mut statement = self.connection.prepare(
-            "SELECT a.id, a.name, COUNT(DISTINCT t.album_id), COUNT(t.id)
+            "SELECT a.id, a.name, COUNT(DISTINCT t.album_id), COUNT(t.id),
+                    COALESCE(MAX(t.has_art), 0)
              FROM artists a
              JOIN tracks t ON t.artist_id = a.id
              GROUP BY a.id
@@ -497,6 +499,7 @@ impl Db {
                     name: row.get(1)?,
                     album_count: row.get(2)?,
                     track_count: row.get(3)?,
+                    has_art: row.get::<_, i64>(4)? != 0,
                 })
             })?
             .collect();
@@ -532,6 +535,24 @@ impl Db {
             .query_map(params![artist_id, limit, offset], map_track)?
             .collect();
         tracks
+    }
+
+    /// One embedded picture for this artist: the first of their tracks that
+    /// has artwork, in the same order as the artist page.
+    pub fn artist_art_source(&self, artist_id: i64) -> Result<Option<String>> {
+        match self.connection.query_row(
+            "SELECT path FROM tracks
+             WHERE artist_id = ?1 AND has_art = 1
+             ORDER BY album COLLATE NOCASE, COALESCE(disc_no, 1),
+                      COALESCE(track_no, 2147483647), id
+             LIMIT 1",
+            [artist_id],
+            |row| row.get(0),
+        ) {
+            Ok(path) => Ok(Some(path)),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+            Err(error) => Err(error),
+        }
     }
 
     pub fn album_art_source(&self, album_id: i64) -> Result<Option<String>> {

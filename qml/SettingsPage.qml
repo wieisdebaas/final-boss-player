@@ -46,11 +46,23 @@ Item {
     anchors.margins: 20
     spacing: 16
 
-    Text {
-      color: Color.foreground
-      font.pixelSize: 20
-      font.bold: true
-      text: "Settings"
+    Row {
+      width: parent.width
+      spacing: 12
+      Text {
+        width: Math.max(0, parent.width - viewToggle.width - 12)
+        height: viewToggle.height
+        verticalAlignment: Text.AlignVCenter
+        elide: Text.ElideRight
+        color: Color.foreground
+        font.pixelSize: 20
+        font.bold: true
+        text: "Settings"
+      }
+      ViewToggle {
+        id: viewToggle
+        service: root.service
+      }
     }
 
     Text {

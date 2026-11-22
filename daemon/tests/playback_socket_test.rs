@@ -203,6 +203,10 @@ async fn play_next_pause_and_persist_over_the_socket_without_audio_hardware() {
         .call(json!({ "cmd": "get_art", "album_id": album_id }))
         .await;
     assert_eq!(art["error"]["code"], "not_found");
+    let artist_art = client
+        .call(json!({ "cmd": "get_artist_art", "artist_id": artist_id }))
+        .await;
+    assert_eq!(artist_art["error"]["code"], "not_found");
 
     // play: album queue starting at the second track.
     let response = client
@@ -273,6 +277,18 @@ async fn play_next_pause_and_persist_over_the_socket_without_audio_hardware() {
     // play_album plays the album from the first track
     let response = client
         .call(json!({ "cmd": "play_album", "album_id": album_id }))
+        .await;
+    assert_eq!(response["ok"], true, "{response}");
+    assert_eq!(client.state().await["track"]["title"], "Track 1");
+
+    // play_artist starts that artist's queue from the first track
+    let response = client
+        .call(json!({ "cmd": "play", "track_id": ids[2], "scope": "artist" }))
+        .await;
+    assert_eq!(response["ok"], true, "{response}");
+    assert_eq!(client.state().await["track"]["title"], "Track 3");
+    let response = client
+        .call(json!({ "cmd": "play_artist", "artist_id": artist_id }))
         .await;
     assert_eq!(response["ok"], true, "{response}");
     assert_eq!(client.state().await["track"]["title"], "Track 1");

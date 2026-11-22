@@ -14,6 +14,7 @@ Item {
   property var tracks: []
   property bool loading: false
   property string errorText: ""
+  property int loadSerial: 0
   readonly property var selected: service ? service.selectedAlbum : null
   readonly property int revision: service ? service.libraryRevision : 0
   readonly property bool connected: service ? service.connected : false
@@ -39,6 +40,8 @@ Item {
   }
 
   function refresh() {
+    root.loadSerial += 1
+    var serial = root.loadSerial
     if (!service || !service.connected) {
       albums = []
       tracks = []
@@ -46,19 +49,17 @@ Item {
       return
     }
     loading = true
-    if (selected) {
-      service.query("album", String(selected.id), 500, 0, function(ok, result, error) {
-        root.loading = false
-        root.errorText = ok ? "" : error
-        if (ok) root.tracks = Array.isArray(result) ? result : []
-      })
-    } else {
-      service.query("albums", "", 500, 0, function(ok, result, error) {
-        root.loading = false
-        root.errorText = ok ? "" : error
-        if (ok) root.albums = Array.isArray(result) ? result : []
-      })
-    }
+    var showingAlbum = !!selected
+    var kind = showingAlbum ? "album" : "albums"
+    var q = showingAlbum ? String(selected.id) : ""
+    service.queryPages(kind, q, function(ok, result, error) {
+      if (serial !== root.loadSerial) return
+      root.loading = false
+      root.errorText = ok ? "" : error
+      if (!ok) return
+      if (showingAlbum) root.tracks = result
+      else root.albums = result
+    })
   }
 
   onSelectedChanged: {
@@ -96,6 +97,11 @@ Item {
         color: Color.muted
         font.pixelSize: 12
         text: root.loading ? "Loading\u2026" : root.albums.length + " albums"
+      }
+
+      ViewToggle {
+        Layout.alignment: Qt.AlignVCenter
+        service: root.service
       }
     }
 
@@ -179,6 +185,11 @@ Item {
         enabled: !!(root.service && root.selected)
         onClicked: if (root.service && root.selected)
           root.service.playAlbum(Number(root.selected.id), null)
+      }
+
+      ViewToggle {
+        Layout.alignment: Qt.AlignVCenter
+        service: root.service
       }
     }
 

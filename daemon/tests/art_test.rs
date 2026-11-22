@@ -21,6 +21,11 @@ fn cache_path_is_stable_for_album_id() {
     assert_eq!(art::cache_path(&art_dir, 42), art_dir.join("album-42.jpg"));
     assert_eq!(art::cache_path(&art_dir, 42), art::cache_path(&art_dir, 42));
     assert_ne!(art::cache_path(&art_dir, 42), art::cache_path(&art_dir, 43));
+    assert_eq!(
+        art::artist_cache_path(&art_dir, 42),
+        art_dir.join("artist-42.jpg")
+    );
+    assert_ne!(art::cache_path(&art_dir, 42), art::artist_cache_path(&art_dir, 42));
 }
 
 #[test]
