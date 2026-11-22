@@ -61,24 +61,10 @@ Item {
         : "finalbossd is not running \u2014 start it, then reconnect."
     }
 
-    Rectangle {
+    PillButton {
       visible: !!(root.service && !root.service.connected)
-      width: reconnectLabel.implicitWidth + 24
-      height: 30
-      radius: 6
-      color: Color.accent
-      Text {
-        id: reconnectLabel
-        anchors.centerIn: parent
-        color: Color.background
-        font.pixelSize: 12
-        text: "Reconnect"
-      }
-      MouseArea {
-        anchors.fill: parent
-        cursorShape: Qt.PointingHandCursor
-        onClicked: root.service.reconnect()
-      }
+      label: "Reconnect"
+      onClicked: root.service.reconnect()
     }
 
     Text {
@@ -118,25 +104,10 @@ Item {
           }
         }
       }
-      Rectangle {
-        width: addLabel.implicitWidth + 24
-        height: 34
-        radius: 6
-        color: Color.accent
-        opacity: root.service && root.service.connected ? 1 : 0.4
-        Text {
-          id: addLabel
-          anchors.centerIn: parent
-          color: Color.background
-          font.pixelSize: 13
-          text: "Add folder"
-        }
-        MouseArea {
-          anchors.fill: parent
-          enabled: root.service && root.service.connected
-          cursorShape: Qt.PointingHandCursor
-          onClicked: root.submitFolder()
-        }
+      PillButton {
+        label: "Add folder"
+        enabled: !!(root.service && root.service.connected)
+        onClicked: root.submitFolder()
       }
     }
 
@@ -154,49 +125,26 @@ Item {
           font.pixelSize: 13
           text: String(folderRow.modelData)
         }
-        Text {
-          anchors.verticalCenter: parent.verticalCenter
-          color: Color.muted
-          font.pixelSize: 12
-          text: "Remove"
-          MouseArea {
-            anchors.fill: parent
-            anchors.margins: -4
-            cursorShape: Qt.PointingHandCursor
-            onClicked: root.service.removeFolder(String(folderRow.modelData),
-              function(ok, result, error) {
-                root.report(ok, error, "Removed folder")
-              })
-          }
+        PillButton {
+          filled: false
+          label: "Remove"
+          onClicked: root.service.removeFolder(String(folderRow.modelData),
+            function(ok, result, error) {
+              root.report(ok, error, "Removed folder")
+            })
         }
       }
     }
 
     Row {
       spacing: 12
-      Rectangle {
-        width: rescanLabel.implicitWidth + 24
-        height: 32
-        radius: 6
-        color: "transparent"
-        border.width: 1
-        border.color: Color.accent
-        opacity: root.service && root.service.connected && !root.service.scanning ? 1 : 0.4
-        Text {
-          id: rescanLabel
-          anchors.centerIn: parent
-          color: Color.accent
-          font.pixelSize: 13
-          text: "Rescan"
-        }
-        MouseArea {
-          anchors.fill: parent
-          enabled: root.service && root.service.connected && !root.service.scanning
-          cursorShape: Qt.PointingHandCursor
-          onClicked: if (root.service) root.service.rescan(false, function(ok, result, error) {
-            root.report(ok, error, "Rescan started")
-          })
-        }
+      PillButton {
+        filled: false
+        label: "Rescan"
+        enabled: !!(root.service && root.service.connected && !root.service.scanning)
+        onClicked: if (root.service) root.service.rescan(false, function(ok, result, error) {
+          root.report(ok, error, "Rescan started")
+        })
       }
       Text {
         anchors.verticalCenter: parent.verticalCenter

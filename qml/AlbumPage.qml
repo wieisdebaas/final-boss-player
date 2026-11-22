@@ -173,26 +173,12 @@ Item {
         }
       }
 
-      Rectangle {
+      PillButton {
         Layout.alignment: Qt.AlignVCenter
-        implicitWidth: playLabel.implicitWidth + 24
-        implicitHeight: 30
-        radius: 15
-        color: Color.accent
-        Text {
-          id: playLabel
-          anchors.centerIn: parent
-          color: Color.background
-          font.pixelSize: 12
-          font.bold: true
-          text: "\u25B6 Play album"
-        }
-        MouseArea {
-          anchors.fill: parent
-          cursorShape: Qt.PointingHandCursor
-          onClicked: if (root.service && root.selected)
-            root.service.playAlbum(Number(root.selected.id), null)
-        }
+        label: "\u25B6  Play album"
+        enabled: !!(root.service && root.selected)
+        onClicked: if (root.service && root.selected)
+          root.service.playAlbum(Number(root.selected.id), null)
       }
     }
 
@@ -226,6 +212,7 @@ Item {
       visible: root.selected !== null
       service: root.service
       tracks: root.tracks
+      queueScope: "album"
       emptyText: root.loading ? "" : "No tracks"
     }
   }

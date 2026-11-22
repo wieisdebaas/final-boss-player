@@ -338,6 +338,44 @@ impl Db {
         Ok(id)
     }
 
+    /// Rewrites `Artist/Guest` rows using `credit`, then drops artist names
+    /// that no longer have tracks. `credit` receives the current title and
+    /// artist and returns the replacements. Rows it leaves unchanged are skipped.
+    pub fn rewrite_collaborations<F>(&self, mut credit: F) -> Result<usize>
+    where
+        F: FnMut(&str, &str) -> (String, String),
+    {
+        let rows: Vec<(i64, String, String)> = {
+            let mut statement = self
+                .connection
+                .prepare("SELECT id, title, artist FROM tracks WHERE artist LIKE '%/%'")?;
+            let rows = statement
+                .query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))?
+                .collect::<Result<_>>()?;
+            rows
+        };
+        if rows.is_empty() {
+            return Ok(0);
+        }
+
+        let transaction = self.connection.unchecked_transaction()?;
+        let mut changed = 0;
+        for (id, title, artist) in rows {
+            let (new_title, new_artist) = credit(&title, &artist);
+            if new_artist.is_empty() || (new_title == title && new_artist == artist) {
+                continue;
+            }
+            let artist_id = Self::upsert_artist(&transaction, &new_artist)?;
+            changed += transaction.execute(
+                "UPDATE tracks SET title = ?1, artist = ?2, artist_id = ?3 WHERE id = ?4",
+                params![new_title, new_artist, artist_id, id],
+            )?;
+        }
+        Self::cleanup_orphans(&transaction)?;
+        transaction.commit()?;
+        Ok(changed)
+    }
+
     pub fn remove_missing_under(&self, folder_id: i64, present_paths: &[String]) -> Result<usize> {
         let transaction = self.connection.unchecked_transaction()?;
         let present: HashSet<&str> = present_paths.iter().map(String::as_str).collect();
@@ -485,6 +523,26 @@ impl Db {
         }
     }
 
+    /// Play queue for `scope`.
+    ///
+    /// `"library"` is every track in library order. `"artist"` is every track
+    /// by the same artist. `"album"` (and any other value) is the track's
+    /// album, or just the track when it has no album.
+    pub fn queue_for_scope(
+        &self,
+        track_id: i64,
+        scope: &str,
+    ) -> Result<Option<(Vec<Track>, usize)>> {
+        match scope {
+            "library" => {
+                let tracks = self.list_tracks(u32::MAX, 0)?;
+                Ok(queue_index(tracks, track_id))
+            }
+            "artist" => self.queue_for_artist(track_id),
+            _ => self.queue_for_track(track_id),
+        }
+    }
+
     /// Play queue for a single track: its album in album order and the
     /// track's index within it, or just the track when it has no album.
     pub fn queue_for_track(&self, track_id: i64) -> Result<Option<(Vec<Track>, usize)>> {
@@ -513,6 +571,27 @@ impl Db {
             .query_map([track_id], map_track)?
             .collect::<Result<_>>()?;
         Ok(Some((tracks, 0)))
+    }
+
+    /// Every track by this track's artist, in artist-page order.
+    /// A track with no artist falls back to its album queue.
+    fn queue_for_artist(&self, track_id: i64) -> Result<Option<(Vec<Track>, usize)>> {
+        let artist_id = match self.connection.query_row(
+            "SELECT artist_id FROM tracks WHERE id = ?1",
+            [track_id],
+            |row| row.get::<_, Option<i64>>(0),
+        ) {
+            Ok(artist_id) => artist_id,
+            Err(rusqlite::Error::QueryReturnedNoRows) => return Ok(None),
+            Err(error) => return Err(error),
+        };
+        if let Some(artist_id) = artist_id {
+            let tracks = self.artist_tracks(artist_id, u32::MAX, 0)?;
+            if let Some(queue) = queue_index(tracks, track_id) {
+                return Ok(Some(queue));
+            }
+        }
+        self.queue_for_track(track_id)
     }
 
     pub fn stats(&self) -> Result<LibraryStats> {
@@ -588,6 +667,11 @@ impl Db {
         )?;
         Ok(())
     }
+}
+
+fn queue_index(tracks: Vec<Track>, track_id: i64) -> Option<(Vec<Track>, usize)> {
+    let index = tracks.iter().position(|track| track.id == track_id)?;
+    Some((tracks, index))
 }
 
 fn map_track(row: &rusqlite::Row<'_>) -> Result<Track> {

@@ -411,6 +411,8 @@ pub struct Engine {
     resume_ms: u64,
     volume: f32,
     error: Option<PlayError>,
+    /// Where the current queue came from: "album", "artist", or "library".
+    queue_scope: String,
 }
 
 impl Engine {
@@ -423,7 +425,20 @@ impl Engine {
             resume_ms: 0,
             volume: 1.0,
             error: None,
+            queue_scope: "album".into(),
         }
+    }
+
+    pub fn queue_scope(&self) -> &str {
+        &self.queue_scope
+    }
+
+    pub fn set_queue_scope(&mut self, scope: &str) {
+        self.queue_scope = if scope.is_empty() {
+            "album".into()
+        } else {
+            scope.into()
+        };
     }
 
     pub fn current_id(&self) -> Option<i64> {
@@ -639,6 +654,9 @@ enum Direction {
 pub struct SavedPlayback {
     pub track_id: i64,
     pub position_ms: u64,
+    /// "album", "artist", or "library". Missing in older files, which means album.
+    #[serde(default)]
+    pub scope: String,
 }
 
 /// Atomically writes the last track and position.
@@ -657,7 +675,11 @@ pub fn load_playback(path: &Path) -> Option<SavedPlayback> {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Cmd {
-    PlayItems { items: Vec<QueueItem>, start: usize },
+    PlayItems {
+        items: Vec<QueueItem>,
+        start: usize,
+        scope: String,
+    },
     Pause,
     Toggle,
     Next,
@@ -672,6 +694,7 @@ pub struct Restore {
     pub items: Vec<QueueItem>,
     pub start: usize,
     pub position_ms: u64,
+    pub scope: String,
 }
 
 enum Request {
@@ -707,6 +730,7 @@ impl Player {
             .spawn(move || {
                 let mut engine = Engine::new(make_backend(), seed);
                 if let Some(restore) = restore {
+                    engine.set_queue_scope(&restore.scope);
                     engine.restore(restore.items, restore.start, restore.position_ms);
                 }
                 let mut sync = Mirror::new(state, runtime, persist_path);
@@ -780,7 +804,14 @@ impl Player {
 
 fn apply(engine: &mut Engine, cmd: Cmd) -> Result<(), PlayError> {
     match cmd {
-        Cmd::PlayItems { items, start } => engine.play_items(items, start),
+        Cmd::PlayItems {
+            items,
+            start,
+            scope,
+        } => {
+            engine.set_queue_scope(&scope);
+            engine.play_items(items, start)
+        }
         Cmd::Pause => {
             engine.pause();
             Ok(())
@@ -854,6 +885,7 @@ impl Mirror {
         let saved = SavedPlayback {
             track_id,
             position_ms: engine.view().position_ms,
+            scope: engine.queue_scope().to_string(),
         };
         if let Err(error) = save_playback(path, &saved) {
             tracing::warn!(%error, "could not persist playback position");

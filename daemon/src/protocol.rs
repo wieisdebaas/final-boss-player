@@ -37,6 +37,9 @@ pub enum Command {
     },
     Play {
         track_id: i64,
+        /// "album", "artist", or "library". Omitted means the track's album.
+        #[serde(default)]
+        scope: String,
     },
     PlayAlbum {
         album_id: i64,

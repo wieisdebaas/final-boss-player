@@ -133,6 +133,45 @@ fn rejects_newer_schema_without_downgrading_it() {
 }
 
 #[test]
+fn collapses_slash_artists_onto_the_primary_name() {
+    let temp = tempdir().unwrap();
+    let db = Db::open(temp.path().join("library.sqlite")).unwrap();
+    let folder_id = db.upsert_folder("/music", None).unwrap();
+    let mut collab = track(folder_id, "/music/questions.flac", "21 Questions");
+    collab.artist = Some("50 Cent/Nate Dogg".into());
+    let mut solo = track(folder_id, "/music/club.flac", "In Da Club");
+    solo.artist = Some("50 Cent".into());
+    db.upsert_track(&collab).unwrap();
+    db.upsert_track(&solo).unwrap();
+
+    let changed = db
+        .rewrite_collaborations(|title, artist| {
+            let (primary, guest) = artist.split_once('/').unwrap();
+            (format!("{title} - featuring {guest}"), primary.to_owned())
+        })
+        .unwrap();
+
+    assert_eq!(changed, 1);
+    let artists = db.list_artists(10, 0).unwrap();
+    assert_eq!(artists.len(), 1);
+    assert_eq!(artists[0].name, "50 Cent");
+    assert_eq!(artists[0].track_count, 2);
+    let questions = db
+        .list_tracks(10, 0)
+        .unwrap()
+        .into_iter()
+        .find(|track| track.path.ends_with("questions.flac"))
+        .unwrap();
+    assert_eq!(questions.title, "21 Questions - featuring Nate Dogg");
+    assert_eq!(questions.artist.as_deref(), Some("50 Cent"));
+    assert_eq!(
+        db.rewrite_collaborations(|title, artist| (title.to_owned(), artist.to_owned()))
+            .unwrap(),
+        0
+    );
+}
+
+#[test]
 fn failed_track_upsert_rolls_back_artist_and_album() {
     let temp = tempdir().unwrap();
     let db = Db::open(temp.path().join("library.sqlite")).unwrap();
@@ -225,4 +264,97 @@ fn open_enables_wal_journal_mode() {
         .query_row("PRAGMA journal_mode", [], |row| row.get(0))
         .unwrap();
     assert_eq!(mode, "wal");
+}
+
+fn scoped(
+    folder_id: i64,
+    path: &str,
+    title: &str,
+    artist: &str,
+    album: &str,
+    track_no: i64,
+) -> TrackInput {
+    let mut input = track(folder_id, path, title);
+    input.artist = Some(artist.into());
+    input.album_artist = Some(artist.into());
+    input.album = Some(album.into());
+    input.track_no = Some(track_no);
+    input
+}
+
+fn titles(queue: Option<(Vec<db::Track>, usize)>) -> (Vec<String>, usize) {
+    let (tracks, index) = queue.expect("queue");
+    (tracks.into_iter().map(|track| track.title).collect(), index)
+}
+
+#[test]
+fn play_queue_follows_album_artist_or_the_whole_library() {
+    let temp = tempdir().unwrap();
+    let db = Db::open(temp.path().join("library.sqlite")).unwrap();
+    let folder_id = db.upsert_folder("/music", None).unwrap();
+    let ada_one = db
+        .upsert_track(&scoped(
+            folder_id,
+            "/music/a1.flac",
+            "Ada One",
+            "Ada",
+            "Alpha",
+            1,
+        ))
+        .unwrap();
+    let ada_two = db
+        .upsert_track(&scoped(
+            folder_id,
+            "/music/a2.flac",
+            "Ada Two",
+            "Ada",
+            "Alpha",
+            2,
+        ))
+        .unwrap();
+    let ada_beta = db
+        .upsert_track(&scoped(
+            folder_id,
+            "/music/b1.flac",
+            "Ada Beta",
+            "Ada",
+            "Beta",
+            1,
+        ))
+        .unwrap();
+    let _bea = db
+        .upsert_track(&scoped(
+            folder_id,
+            "/music/c1.flac",
+            "Bea One",
+            "Bea",
+            "Gamma",
+            1,
+        ))
+        .unwrap();
+
+    assert_eq!(
+        titles(db.queue_for_scope(ada_two, "album").unwrap()),
+        (vec!["Ada One".into(), "Ada Two".into()], 1)
+    );
+    assert_eq!(
+        titles(db.queue_for_scope(ada_beta, "artist").unwrap()),
+        (
+            vec!["Ada One".into(), "Ada Two".into(), "Ada Beta".into()],
+            2
+        )
+    );
+    assert_eq!(
+        titles(db.queue_for_scope(ada_one, "library").unwrap()),
+        (
+            vec![
+                "Ada Beta".into(),
+                "Ada One".into(),
+                "Ada Two".into(),
+                "Bea One".into(),
+            ],
+            1
+        )
+    );
+    assert!(db.queue_for_scope(9999, "library").unwrap().is_none());
 }

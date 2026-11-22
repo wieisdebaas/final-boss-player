@@ -8,6 +8,8 @@ Rectangle {
   id: root
 
   property var service: null
+  // Sidebar width. Song info starts to the right of it, with the page content.
+  property int menuWidth: 0
 
   property string artPath: ""
   property int artAlbumId: -1
@@ -80,21 +82,37 @@ Rectangle {
     color: Qt.rgba(Color.foreground.r, Color.foreground.g, Color.foreground.b, 0.12)
   }
 
-  Row {
-    id: nowPlaying
+  Item {
+    id: zones
     anchors.left: parent.left
-    anchors.leftMargin: 12
+    anchors.right: parent.right
     anchors.verticalCenter: parent.verticalCenter
-    spacing: 10
-    width: Math.min(280, parent.width * 0.32)
+    anchors.leftMargin: root.menuWidth + 20
+    anchors.rightMargin: 16
+    height: Math.max(transport.implicitHeight, nowPlaying.height)
 
-    Rectangle {
-      width: 48
-      height: 48
-      radius: 4
+    readonly property int volumeWidth: 100
+    readonly property int gap: 16
+    readonly property int centerWidth: Math.max(
+      transportRow.implicitWidth,
+      Math.min(420, width - 2 * (volumeWidth + gap)))
+
+    Item {
+      id: nowPlaying
+      anchors.left: parent.left
+      anchors.right: transport.left
+      anchors.rightMargin: zones.gap
       anchors.verticalCenter: parent.verticalCenter
-      color: Qt.rgba(Color.foreground.r, Color.foreground.g, Color.foreground.b, 0.08)
-      clip: true
+      height: 48
+
+      Rectangle {
+        id: art
+        width: 48
+        height: 48
+        radius: 4
+        anchors.verticalCenter: parent.verticalCenter
+        color: Qt.rgba(Color.foreground.r, Color.foreground.g, Color.foreground.b, 0.08)
+        clip: true
 
       SizedImage {
         anchors.fill: parent
@@ -113,8 +131,10 @@ Rectangle {
     }
 
     Column {
+      anchors.left: art.right
+      anchors.leftMargin: 10
+      anchors.right: parent.right
       anchors.verticalCenter: parent.verticalCenter
-      width: parent.width - 58
       spacing: 2
       Text {
         width: parent.width
@@ -190,120 +210,137 @@ Rectangle {
     }
   }
 
-  Column {
-    anchors.centerIn: parent
-    width: Math.min(420, parent.width - 560)
-    spacing: 6
-
-    Row {
+    Column {
+      id: transport
+      width: zones.centerWidth
       anchors.horizontalCenter: parent.horizontalCenter
-      spacing: 20
-      Repeater {
-        model: [
-          { glyph: "\u23EE", action: "previous", accent: false },
-          { glyph: root.service && root.service.playing ? "\u23F8" : "\u25B6", action: "toggle", accent: false },
-          { glyph: "\u23ED", action: "next", accent: false },
-          { glyph: "\u21C4", action: "toggleShuffle", accent: true }
-        ]
-        delegate: Text {
-          id: transport
-          required property var modelData
-          color: modelData.accent && root.service && root.service.shuffle
-            ? Color.accent
-            : Color.foreground
-          font.pixelSize: 20
-          opacity: root.service && root.service.connected ? 1 : 0.4
-          text: modelData.glyph
+      anchors.verticalCenter: parent.verticalCenter
+      spacing: 6
+
+      Row {
+        id: transportRow
+        anchors.horizontalCenter: parent.horizontalCenter
+        spacing: 10
+
+        Repeater {
+          model: [
+            { glyph: "\u23EE", action: "previous", primary: false, active: false, offset: 0 },
+            {
+              glyph: root.service && root.service.playing ? "\u23F8" : "\u25B6",
+              action: "toggle",
+              primary: true,
+              active: false,
+              offset: root.service && root.service.playing ? 0 : 1
+            },
+            { glyph: "\u23ED", action: "next", primary: false, active: false, offset: 0 },
+            {
+              glyph: "\u21C4",
+              action: "toggleShuffle",
+              primary: false,
+              active: !!(root.service && root.service.shuffle),
+              offset: 0
+            }
+          ]
+          delegate: IconButton {
+            required property var modelData
+            glyph: modelData.glyph
+            primary: modelData.primary
+            active: modelData.active
+            glyphOffset: modelData.offset
+            enabled: !!(root.service && root.service.connected)
+            onClicked: if (root.service) root.service[modelData.action]()
+          }
+        }
+      }
+
+      Row {
+        id: seekRow
+        width: parent.width
+        spacing: 8
+
+        Text {
+          color: Color.muted
+          font.pixelSize: 11
+          text: root.formatTime(root.positionMs)
+        }
+        Rectangle {
+          id: track
+          width: parent.width - 80
+          height: 4
+          radius: 2
+          anchors.verticalCenter: parent.verticalCenter
+          color: Qt.rgba(Color.foreground.r, Color.foreground.g, Color.foreground.b, 0.18)
+          Rectangle {
+            width: parent.width * root.progress
+            height: parent.height
+            radius: 2
+            color: Color.accent
+          }
           MouseArea {
             anchors.fill: parent
-            anchors.margins: -6
+            anchors.topMargin: -8
+            anchors.bottomMargin: -8
+            enabled: root.durationMs > 0
             cursorShape: Qt.PointingHandCursor
-            onClicked: if (root.service) root.service[transport.modelData.action]()
+            onClicked: function(mouse) {
+              if (root.service) root.service.seek(root.durationMs * mouse.x / track.width)
+            }
           }
+        }
+        Text {
+          color: Color.muted
+          font.pixelSize: 11
+          text: root.formatTime(root.durationMs)
         }
       }
     }
 
-    Row {
-      width: parent.width
-      spacing: 8
-      Text {
-        color: Color.muted
-        font.pixelSize: 11
-        text: root.formatTime(root.positionMs)
+    Column {
+      width: zones.volumeWidth
+      anchors.right: parent.right
+      anchors.top: transport.top
+      spacing: 6
+
+      Item {
+        width: parent.width
+        height: transportRow.implicitHeight
+
+        IconButton {
+          id: volumeButton
+          anchors.horizontalCenter: parent.horizontalCenter
+          glyph: root.volumeGlyph()
+          enabled: !!(root.service && root.service.connected)
+          onClicked: if (root.service) root.service.toggleMute()
+        }
       }
-      Rectangle {
-        id: track
-        width: parent.width - 80
-        height: 4
-        radius: 2
-        anchors.verticalCenter: parent.verticalCenter
-        color: Qt.rgba(Color.foreground.r, Color.foreground.g, Color.foreground.b, 0.18)
+
+      Item {
+        width: parent.width
+        height: seekRow.implicitHeight
+
         Rectangle {
-          width: parent.width * root.progress
-          height: parent.height
+          id: volumeTrack
+          anchors.left: parent.left
+          anchors.right: parent.right
+          anchors.verticalCenter: parent.verticalCenter
+          height: track.height
           radius: 2
-          color: Color.accent
-        }
-        MouseArea {
-          anchors.fill: parent
-          anchors.topMargin: -8
-          anchors.bottomMargin: -8
-          enabled: root.durationMs > 0
-          cursorShape: Qt.PointingHandCursor
-          onClicked: function(mouse) {
-            if (root.service) root.service.seek(root.durationMs * mouse.x / track.width)
+          color: Qt.rgba(Color.foreground.r, Color.foreground.g, Color.foreground.b, 0.18)
+          Rectangle {
+            width: parent.width * root.volume
+            height: parent.height
+            radius: 2
+            color: Color.accent
           }
-        }
-      }
-      Text {
-        color: Color.muted
-        font.pixelSize: 11
-        text: root.formatTime(root.durationMs)
-      }
-    }
-  }
-
-  Row {
-    anchors.right: parent.right
-    anchors.rightMargin: 16
-    anchors.verticalCenter: parent.verticalCenter
-    spacing: 8
-
-    Text {
-      anchors.verticalCenter: parent.verticalCenter
-      color: Color.muted
-      font.pixelSize: 16
-      opacity: root.service && root.service.connected ? 1 : 0.4
-      text: root.volumeGlyph()
-      MouseArea {
-        anchors.fill: parent
-        anchors.margins: -4
-        cursorShape: Qt.PointingHandCursor
-        onClicked: if (root.service) root.service.toggleMute()
-      }
-    }
-
-    Rectangle {
-      id: volumeTrack
-      width: 100
-      height: 4
-      radius: 2
-      anchors.verticalCenter: parent.verticalCenter
-      color: Qt.rgba(Color.foreground.r, Color.foreground.g, Color.foreground.b, 0.18)
-      Rectangle {
-        width: parent.width * root.volume
-        height: parent.height
-        radius: 2
-        color: Color.accent
-      }
-      MouseArea {
-        anchors.fill: parent
-        anchors.topMargin: -8
-        anchors.bottomMargin: -8
-        cursorShape: Qt.PointingHandCursor
-        onClicked: function(mouse) {
-          if (root.service) root.service.setVolume(mouse.x / volumeTrack.width)
+          MouseArea {
+            anchors.fill: parent
+            anchors.topMargin: -8
+            anchors.bottomMargin: -8
+            cursorShape: Qt.PointingHandCursor
+            onClicked: function(mouse) {
+              if (root.service) root.service.setVolume(mouse.x / volumeTrack.width)
+            }
+          }
         }
       }
     }

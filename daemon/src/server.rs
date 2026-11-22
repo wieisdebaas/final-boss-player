@@ -102,6 +102,20 @@ pub async fn run_with_paths(
     let folders = tokio::task::spawn_blocking(move || -> Result<Vec<String>> {
         let db = crate::db::Db::open(&open_path)
             .with_context(|| format!("could not open library database {}", open_path.display()))?;
+        let collapsed =
+            db.rewrite_collaborations(|title, artist| match crate::meta::credit_featured_artists(
+                title.to_owned(),
+                Some(artist.to_owned()),
+            ) {
+                (title, Some(artist)) => (title, artist),
+                (title, None) => (title, String::new()),
+            })?;
+        if collapsed > 0 {
+            tracing::info!(
+                tracks = collapsed,
+                "moved slash-separated guests onto featuring credits"
+            );
+        }
         Ok(db.list_folders()?.into_iter().map(|f| f.path).collect())
     })
     .await
@@ -148,15 +162,17 @@ pub async fn serve_with_player(
 
 pub const PLAYBACK_FILE: &str = "playback.json";
 
-/// Rebuilds the last queue (the track's album) paused at the saved position.
+/// Rebuilds the last queue paused at the saved position.
+/// The saved scope selects the album, the artist, or the whole library.
 pub fn load_restore(db_path: &Path, playback_path: &Path) -> Option<Restore> {
     let saved = player::load_playback(playback_path)?;
     let db = crate::db::Db::open(db_path).ok()?;
-    let (tracks, start) = db.queue_for_track(saved.track_id).ok()??;
+    let (tracks, start) = db.queue_for_scope(saved.track_id, &saved.scope).ok()??;
     Some(Restore {
         items: tracks.iter().map(queue_item).collect(),
         start,
         position_ms: saved.position_ms,
+        scope: saved.scope,
     })
 }
 
@@ -337,7 +353,7 @@ async fn dispatch(line: &str, context: &ServerContext) -> ServerMessage {
             offset,
         } => query(request.id, context, kind, q, limit, offset).await,
         Command::GetArt { album_id } => get_art(request.id, context, album_id).await,
-        Command::Play { track_id } => play_track(request.id, context, track_id).await,
+        Command::Play { track_id, scope } => play_track(request.id, context, track_id, scope).await,
         Command::PlayAlbum { album_id } => play_album(request.id, context, album_id).await,
         Command::Pause => playback(request.id, context, Cmd::Pause).await,
         Command::Toggle => playback(request.id, context, Cmd::Toggle).await,
@@ -450,12 +466,21 @@ async fn playback(id: u64, context: &ServerContext, cmd: Cmd) -> ServerMessage {
     }
 }
 
-async fn play_track(id: u64, context: &ServerContext, track_id: i64) -> ServerMessage {
-    play_queue(id, context, move |db| db.queue_for_track(track_id)).await
+async fn play_track(
+    id: u64,
+    context: &ServerContext,
+    track_id: i64,
+    scope: String,
+) -> ServerMessage {
+    let query_scope = scope.clone();
+    play_queue(id, context, scope, move |db| {
+        db.queue_for_scope(track_id, &query_scope)
+    })
+    .await
 }
 
 async fn play_album(id: u64, context: &ServerContext, album_id: i64) -> ServerMessage {
-    play_queue(id, context, move |db| {
+    play_queue(id, context, "album".into(), move |db| {
         let tracks = db.album_tracks(album_id)?;
         Ok((!tracks.is_empty()).then_some((tracks, 0)))
     })
@@ -463,7 +488,7 @@ async fn play_album(id: u64, context: &ServerContext, album_id: i64) -> ServerMe
 }
 
 /// Resolves a queue from the library, then hands it to the player.
-async fn play_queue<F>(id: u64, context: &ServerContext, resolve: F) -> ServerMessage
+async fn play_queue<F>(id: u64, context: &ServerContext, scope: String, resolve: F) -> ServerMessage
 where
     F: FnOnce(&crate::db::Db) -> rusqlite::Result<Option<(Vec<crate::db::Track>, usize)>>
         + Send
@@ -484,7 +509,14 @@ where
         Err(error) => return error_response(id, "internal_error", error.to_string()),
     };
     let items = tracks.iter().map(queue_item).collect();
-    match player.send_timed(Cmd::PlayItems { items, start }).await {
+    match player
+        .send_timed(Cmd::PlayItems {
+            items,
+            start,
+            scope,
+        })
+        .await
+    {
         Ok(()) => ok_response(id, None),
         Err(error) => play_error_response(id, error),
     }

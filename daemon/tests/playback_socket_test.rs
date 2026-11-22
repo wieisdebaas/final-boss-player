@@ -314,3 +314,89 @@ async fn playback_commands_without_a_player_report_unavailable() {
     assert_eq!(response["error"]["code"], "unavailable");
     task.abort();
 }
+
+#[tokio::test]
+async fn play_scope_keeps_album_and_artist_queues_and_opens_the_library() {
+    let temp = tempdir().unwrap();
+    let db_path = temp.path().join("library.sqlite");
+    let database = db::Db::open(&db_path).unwrap();
+    let folder = database
+        .upsert_folder(&temp.path().to_string_lossy(), None)
+        .unwrap();
+    let id = |title: &str, artist: &str, album: &str, no: i64| {
+        let path = temp.path().join(format!("{title}.flac"));
+        std::fs::write(&path, b"x").unwrap();
+        let mut input = track(folder, &path, title, no);
+        input.artist = Some(artist.into());
+        input.album_artist = Some(artist.into());
+        input.album = Some(album.into());
+        database.upsert_track(&input).unwrap()
+    };
+    let ada_one = id("Ada One", "Ada", "Alpha", 1);
+    let ada_two = id("Ada Two", "Ada", "Alpha", 2);
+    let _ada_beta = id("Ada Beta", "Ada", "Beta", 1);
+    let _bea = id("Bea One", "Bea", "Gamma", 1);
+    drop(database);
+
+    let app_state = state::AppState::new();
+    let player = Player::spawn(
+        || Box::new(FakeBackend(Arc::new(Mutex::new(Log::default())))),
+        app_state.clone(),
+        tokio::runtime::Handle::current(),
+        Some(temp.path().join(server::PLAYBACK_FILE)),
+        None,
+    );
+    let socket_path = temp.path().join("backend.sock");
+    let listener = server::bind(&socket_path).unwrap();
+    let task = tokio::spawn(server::serve_with_player(
+        listener,
+        app_state,
+        db_path.clone(),
+        player,
+    ));
+    let stream = UnixStream::connect(&socket_path).await.unwrap();
+    let (reader, writer) = stream.into_split();
+    let mut client = Client {
+        lines: BufReader::new(reader).lines(),
+        writer,
+        next_id: 0,
+    };
+
+    // Album play stays on that album.
+    assert_eq!(
+        client
+            .call(json!({ "cmd": "play", "track_id": ada_one, "scope": "album" }))
+            .await["ok"],
+        true
+    );
+    assert_eq!(client.call(json!({ "cmd": "next" })).await["ok"], true);
+    assert_eq!(client.state().await["track"]["title"], "Ada Two");
+    assert_eq!(client.call(json!({ "cmd": "next" })).await["ok"], true);
+    assert_eq!(client.state().await["track"]["title"], "Ada Two");
+
+    // Artist play continues onto the artist's other album.
+    assert_eq!(
+        client
+            .call(json!({ "cmd": "play", "track_id": ada_two, "scope": "artist" }))
+            .await["ok"],
+        true
+    );
+    assert_eq!(client.call(json!({ "cmd": "next" })).await["ok"], true);
+    assert_eq!(client.state().await["track"]["title"], "Ada Beta");
+
+    // Library play continues across artists. Title order after Ada Two is Bea One.
+    assert_eq!(
+        client
+            .call(json!({ "cmd": "play", "track_id": ada_two, "scope": "library" }))
+            .await["ok"],
+        true
+    );
+    assert_eq!(client.call(json!({ "cmd": "next" })).await["ok"], true);
+    assert_eq!(client.state().await["track"]["title"], "Bea One");
+
+    let restore = server::load_restore(&db_path, &temp.path().join(server::PLAYBACK_FILE)).unwrap();
+    assert_eq!(restore.items.len(), 4);
+    assert_eq!(restore.items[restore.start].meta["title"], "Bea One");
+
+    task.abort();
+}

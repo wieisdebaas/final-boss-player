@@ -239,6 +239,7 @@ BarWidget {
             foreground: root.foreground
             horizontalPadding: Style.spacing.controlPaddingX
             verticalPadding: Style.spacing.controlPaddingY
+            iconSize: Style.font.iconLarge
             enabled: root.connected
             opacity: enabled ? 1.0 : 0.4
             onClicked: if (root.player) root.player.previous()
@@ -247,7 +248,7 @@ BarWidget {
           Button {
             iconText: root.isPlaying ? "󰏤" : "󰐊"
             foreground: root.foreground
-            horizontalPadding: Style.spacing.panelGap
+            horizontalPadding: Style.spacing.controlPaddingX
             verticalPadding: Style.spacing.controlPaddingY
             iconSize: Style.font.iconLarge
             enabled: root.connected
@@ -260,6 +261,7 @@ BarWidget {
             foreground: root.foreground
             horizontalPadding: Style.spacing.controlPaddingX
             verticalPadding: Style.spacing.controlPaddingY
+            iconSize: Style.font.iconLarge
             enabled: root.connected
             opacity: enabled ? 1.0 : 0.4
             onClicked: if (root.player) root.player.next()

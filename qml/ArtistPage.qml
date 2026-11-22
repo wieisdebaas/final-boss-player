@@ -112,6 +112,7 @@ Item {
       visible: root.selected !== null
       service: root.service
       tracks: root.tracks
+      queueScope: "artist"
       showNumbers: false
       emptyText: root.loading ? "" : "No tracks"
     }

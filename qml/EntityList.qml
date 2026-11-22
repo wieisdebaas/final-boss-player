@@ -131,23 +131,15 @@ ListView {
       onClicked: root.activated(row.modelData)
     }
 
-    Text {
+    IconButton {
       id: playGlyph
       anchors.right: parent.right
-      anchors.rightMargin: 14
+      anchors.rightMargin: 10
       anchors.verticalCenter: parent.verticalCenter
       visible: root.playable
-      color: playArea.containsMouse ? Color.accent : Color.muted
-      font.pixelSize: 18
-      text: "\u25B6"
-      MouseArea {
-        id: playArea
-        anchors.fill: parent
-        anchors.margins: -8
-        hoverEnabled: true
-        cursorShape: Qt.PointingHandCursor
-        onClicked: root.playRequested(row.modelData)
-      }
+      glyph: "\u25B6"
+      glyphOffset: 1
+      onClicked: root.playRequested(row.modelData)
     }
   }
 

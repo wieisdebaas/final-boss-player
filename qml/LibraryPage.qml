@@ -11,26 +11,43 @@ Item {
   property var tracks: []
   property bool loading: false
   property string errorText: ""
+  property int loadSerial: 0
+  // The daemon returns at most 500 tracks per query. Page until a short page
+  // so the header count and the list are the whole library.
   readonly property int pageLimit: 500
   readonly property int revision: service ? service.libraryRevision : 0
   readonly property bool connected: service ? service.connected : false
 
   function refresh() {
+    root.loadSerial += 1
+    var serial = root.loadSerial
     if (!service || !service.connected) {
       tracks = []
       errorText = "finalbossd is not running"
       return
     }
     loading = true
-    service.query("tracks", "", pageLimit, 0, function(ok, result, error) {
-      root.loading = false
-      if (!ok) {
-        root.errorText = error
-        return
-      }
-      root.errorText = ""
-      root.tracks = Array.isArray(result) ? result : []
-    })
+    var collected = []
+    function take(offset) {
+      service.query("tracks", "", root.pageLimit, offset, function(ok, result, error) {
+        if (serial !== root.loadSerial) return
+        if (!ok) {
+          root.loading = false
+          root.errorText = error
+          return
+        }
+        var batch = Array.isArray(result) ? result : []
+        for (var i = 0; i < batch.length; ++i) collected.push(batch[i])
+        if (batch.length === root.pageLimit) {
+          take(offset + batch.length)
+          return
+        }
+        root.loading = false
+        root.errorText = ""
+        root.tracks = collected
+      })
+    }
+    take(0)
   }
 
   onRevisionChanged: refresh()
@@ -68,6 +85,7 @@ Item {
     anchors.rightMargin: 4
     service: root.service
     tracks: root.tracks
+    queueScope: "library"
     emptyText: root.errorText !== "" ? root.errorText : "No tracks yet"
   }
 

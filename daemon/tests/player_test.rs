@@ -371,6 +371,7 @@ fn playback_persistence_round_trips_and_ignores_garbage() {
     let saved = player::SavedPlayback {
         track_id: 12,
         position_ms: 34_500,
+        scope: String::new(),
     };
     player::save_playback(&path, &saved).unwrap();
     assert_eq!(player::load_playback(&path), Some(saved));
@@ -422,6 +423,7 @@ async fn player_send_times_out_with_player_busy_when_the_thread_is_stuck() {
             player::Cmd::PlayItems {
                 items: items(1),
                 start: 0,
+                scope: "album".into(),
             },
             std::time::Duration::from_millis(150),
         )

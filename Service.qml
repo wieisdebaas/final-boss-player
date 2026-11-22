@@ -161,18 +161,22 @@ Item {
     }, callback)
   }
 
-  function play(trackId, callback) {
-    return request("play", { track_id: trackId }, callback)
+  // scope is "album", "artist", or "library": the queue shuffle and next walk.
+  function play(trackId, scope, callback) {
+    return request("play", {
+      track_id: trackId,
+      scope: scope || "album"
+    }, callback)
   }
-  // Library rows: same track toggles play/pause; a different track starts it.
-  function playOrToggle(trackId, callback) {
+  // Same track toggles play/pause; a different track starts it in `scope`.
+  function playOrToggle(trackId, scope, callback) {
     var id = Number(trackId)
     if (track && Number(track.id) === id) {
       toggle()
       if (typeof callback === "function") callback(true, null, null)
       return true
     }
-    return play(id, callback)
+    return play(id, scope, callback)
   }
   function playAlbum(albumId, callback) {
     return request("play_album", { album_id: albumId }, callback)

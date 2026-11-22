@@ -12,6 +12,8 @@ ListView {
   property var tracks: []
   property string emptyText: "No tracks"
   property bool showNumbers: true
+  // Queue built when a row is played: "album", "artist", or "library".
+  property string queueScope: "album"
 
   readonly property int currentId: service && service.track && service.track.id !== undefined
     ? Number(service.track.id) : -1
@@ -61,7 +63,7 @@ ListView {
       hoverEnabled: true
       cursorShape: Qt.PointingHandCursor
       onClicked: if (root.service)
-        root.service.playOrToggle(Number(row.modelData.id), null)
+        root.service.playOrToggle(Number(row.modelData.id), root.queueScope, null)
     }
 
     Row {
