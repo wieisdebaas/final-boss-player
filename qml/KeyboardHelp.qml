@@ -13,8 +13,8 @@ Column {
       title: "Playback",
       rows: [
         { keys: "Space", action: "Play or pause" },
-        { keys: "Ctrl+P", action: "Previous track" },
-        { keys: "Ctrl+N", action: "Next track" },
+        { keys: "Ctrl+Left, Ctrl+P", action: "Previous track" },
+        { keys: "Ctrl+Right, Ctrl+N", action: "Next track" },
         { keys: "Shift+Left", action: "Seek back 5 seconds" },
         { keys: "Shift+Right", action: "Seek forward 5 seconds" },
         { keys: "Ctrl+Up", action: "Volume up" },
@@ -83,7 +83,7 @@ Column {
 
           Rectangle {
             id: keyChip
-            width: Math.min(188, Math.max(28, keyText.implicitWidth + 14))
+            width: Math.min(240, Math.max(28, keyText.implicitWidth + 14))
             height: 24
             radius: 4
             color: Qt.rgba(Color.foreground.r, Color.foreground.g, Color.foreground.b, 0.08)
@@ -103,7 +103,7 @@ Column {
           Text {
             id: actionText
             anchors.left: parent.left
-            anchors.leftMargin: 200
+            anchors.leftMargin: 252
             anchors.right: parent.right
             anchors.verticalCenter: parent.verticalCenter
             wrapMode: Text.Wrap

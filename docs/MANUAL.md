@@ -95,7 +95,8 @@ Playback works anywhere in the window:
 | Key | Action |
 | --- | --- |
 | `Space` | Play / pause |
-| `Ctrl+P` / `Ctrl+N` | Previous / next |
+| `Ctrl+Left` or `Ctrl+P` | Previous track |
+| `Ctrl+Right` or `Ctrl+N` | Next track |
 | `Shift+Left` / `Shift+Right` | Seek −5s / +5s |
 | `Ctrl+Up` / `Ctrl+Down` | Volume up / down |
 | `Ctrl+M` | Mute |
