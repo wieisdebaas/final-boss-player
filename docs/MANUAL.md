@@ -69,7 +69,7 @@ journalctl --user -u finalbossd -f
 | Scroll | Previous / next track |
 | `Esc` | Close mini-player |
 
-The mini-player shows artwork, title, artist, progress, and transport controls.
+The bar slot is the icon; hover it for the track name. The mini-player shows artwork, title, artist, progress, transport, shuffle, and volume. Click the speaker to mute, or drag the slider. Right-click the slider also mutes.
 
 ### Full player (panel)
 
@@ -84,21 +84,36 @@ Sidebar:
 | **Albums** | Browse by album |
 | **Settings** | Folders, rescan |
 
-The bottom bar always shows the current track and play / pause / seek / volume. Closing the panel does **not** stop playback.
+The bottom bar always shows the current track and play / pause / seek / volume. Click the **title** or the **album** name there to return to the list that queue came from — the album, the artist, or the library — scrolled to the playing song. The artist name still opens that artist. Closing the panel does **not** stop playback.
 
 ### Keyboard shortcuts (panel open)
+
+The same list is on **Settings**, under **Keyboard**.
+
+Playback works anywhere in the window:
 
 | Key | Action |
 | --- | --- |
 | `Space` | Play / pause |
-| `Ctrl+Left` / `Ctrl+Right` | Previous / next |
+| `Ctrl+P` / `Ctrl+N` | Previous / next |
 | `Shift+Left` / `Shift+Right` | Seek −5s / +5s |
 | `Ctrl+Up` / `Ctrl+Down` | Volume up / down |
-| `M` | Mute |
+| `Ctrl+M` | Mute |
+| `Ctrl+S` | Toggle shuffle |
 | `Ctrl+F` | Jump to Search |
 | `Esc` | Close the panel |
 
-**Shuffle** is the ⇄ control on the bottom player bar. When on (accent colour), the rest of the queue is randomized so **Next** picks a shuffled order; the current song finishes first. Turn it off to return to album/list order from the current track.
+One highlight sits on the sidebar or on the page list. `Tab` and `Shift+Tab` switch between them. On Home, `Down` walks Albums and then continues into Tracks. With the highlight on Settings, those list keys scroll the page. In Search or the folder path, the arrow keys edit the text. `Tab` leaves the field for the list, and `Shift+Tab` leaves it for the sidebar. The highlight stays where the last key put it.
+
+| Key | Action |
+| --- | --- |
+| `Up` / `Down` | Previous / next row |
+| `Left` / `Right` | Previous / next cover, in tile view |
+| `Page Up` / `Page Down` | Jump one screen |
+| `Ctrl+Home` / `Ctrl+End` | First / last item |
+| `Enter` | Open the menu page, play the track, or open the album or artist |
+
+**Shuffle** is the ⇄ control on the bottom player bar, or `Ctrl+S`. When on (accent colour), the rest of the queue is randomized so **Next** picks a shuffled order; the current song finishes first. Turn it off to return to album/list order from the current track.
 
 **Library click:** tapping a track title starts it (or toggles pause if it is already loaded). Tapping the **artist** or **album** under the title opens that Artist or Album page. Lists have a **draggable scrollbar** on the right.
 
@@ -113,6 +128,7 @@ While `finalbossd` is running, system media keys and tools that speak MPRIS cont
 - **Add folder** — Settings → path → Add. Nested folders are scanned.
 - **Remove folder** — Settings → remove that path. Tracks for that root leave the index; files on disk are untouched.
 - **Rescan** — Settings → Rescan. Use a full rescan when a NAS has flaky timestamps or you renamed many files.
+- **Same volume** — Settings → Same volume. Quiet and loud files are leveled so the next song plays at a similar volume. The slider still sets how loud the player is overall.
 - **Offline share** — If a mount is missing, that folder shows as unavailable. Remount and rescan or wait for the next scan; the shell should stay responsive.
 
 Supported for indexing: FLAC, MP3, M4A/AAC, WAV, OGG, OPUS.  

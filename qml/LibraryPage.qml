@@ -15,6 +15,7 @@ Item {
   property int loadSerial: 0
   readonly property int revision: service ? service.libraryRevision : 0
   readonly property bool connected: service ? service.connected : false
+  readonly property var keyboardLists: [list]
 
   function refresh() {
     root.loadSerial += 1
@@ -78,6 +79,7 @@ Item {
     service: root.service
     tracks: root.tracks
     queueScope: "library"
+    revealPage: "library"
     emptyText: root.errorText !== "" ? root.errorText : "No tracks yet"
   }
 

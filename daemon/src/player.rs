@@ -9,6 +9,7 @@
 //! - [`Player`]: a dedicated thread that owns the engine (audio streams are not
 //!   `Send`), mirrors it into [`AppState`] and persists the last position.
 
+use std::collections::HashMap;
 use std::fs::{self, File};
 use std::io::BufReader;
 use std::path::{Path, PathBuf};
@@ -413,6 +414,12 @@ pub struct Engine {
     error: Option<PlayError>,
     /// Where the current queue came from: "album", "artist", or "library".
     queue_scope: String,
+    /// Level each track toward the same loudness.
+    normalize: bool,
+    /// Gain for the loaded track. `1.0` when normalization is off.
+    track_gain: f32,
+    gains: HashMap<String, f32>,
+    settings_path: Option<PathBuf>,
 }
 
 impl Engine {
@@ -426,6 +433,10 @@ impl Engine {
             volume: 1.0,
             error: None,
             queue_scope: "album".into(),
+            normalize: false,
+            track_gain: 1.0,
+            gains: HashMap::new(),
+            settings_path: None,
         }
     }
 
@@ -463,6 +474,8 @@ impl Engine {
             repeat: self.queue.repeat().as_str().into(),
             error_code: self.error.as_ref().map(|error| error.code.clone()),
             error_message: self.error.as_ref().map(|error| error.message.clone()),
+            scope: self.queue_scope.clone(),
+            normalize: self.normalize,
         }
     }
 
@@ -550,8 +563,80 @@ impl Engine {
             ));
         }
         self.volume = level.clamp(0.0, 1.0);
-        self.backend.set_volume(self.volume);
+        self.backend.set_volume(self.output_volume());
         Ok(())
+    }
+
+    pub fn set_normalize(&mut self, enabled: bool) {
+        self.normalize = enabled;
+        self.track_gain = self.current_track_gain();
+        self.backend.set_volume(self.output_volume());
+        self.save_settings();
+    }
+
+    /// Reads the saved Same volume switch. Missing files leave it off.
+    pub fn load_settings(&mut self, path: &Path) {
+        self.settings_path = Some(path.to_path_buf());
+        let Ok(bytes) = fs::read(path) else {
+            return;
+        };
+        #[derive(Deserialize)]
+        struct Saved {
+            #[serde(default)]
+            normalize: bool,
+        }
+        if let Ok(saved) = serde_json::from_slice::<Saved>(&bytes) {
+            self.normalize = saved.normalize;
+        }
+    }
+
+    fn save_settings(&self) {
+        let Some(path) = &self.settings_path else {
+            return;
+        };
+        let body = serde_json::json!({ "normalize": self.normalize });
+        let Ok(bytes) = serde_json::to_vec(&body) else {
+            return;
+        };
+        let temporary = path.with_extension("json.tmp");
+        if fs::write(&temporary, bytes).is_ok() {
+            let _ = fs::rename(temporary, path);
+        }
+    }
+
+    fn output_volume(&self) -> f32 {
+        (self.volume * self.track_gain).clamp(0.0, 4.0)
+    }
+
+    fn current_track_gain(&mut self) -> f32 {
+        if !self.normalize {
+            return 1.0;
+        }
+        let Some(path) = self.queue.current().map(|item| item.path.clone()) else {
+            return 1.0;
+        };
+        self.gain_for(&path)
+    }
+
+    fn gain_for(&mut self, path: &Path) -> f32 {
+        let key = match std::fs::metadata(path) {
+            Ok(meta) => {
+                let modified = meta
+                    .modified()
+                    .ok()
+                    .and_then(|time| time.duration_since(std::time::UNIX_EPOCH).ok())
+                    .map(|elapsed| elapsed.as_secs())
+                    .unwrap_or(0);
+                format!("{}:{}:{modified}", path.display(), meta.len())
+            }
+            Err(_) => return crate::loudness::playback_gain(path),
+        };
+        if let Some(gain) = self.gains.get(&key) {
+            return *gain;
+        }
+        let gain = crate::loudness::playback_gain(path);
+        self.gains.insert(key, gain);
+        gain
     }
 
     pub fn set_shuffle(&mut self, enabled: bool) {
@@ -601,6 +686,12 @@ impl Engine {
                 break;
             };
             let path = item.path.clone();
+            self.track_gain = if self.normalize {
+                self.gain_for(&path)
+            } else {
+                1.0
+            };
+            self.backend.set_volume(self.output_volume());
             match self.backend.play(&path, start_ms) {
                 Ok(()) => {
                     self.loaded = true;
@@ -688,6 +779,7 @@ pub enum Cmd {
     SetVolume(f32),
     SetShuffle(bool),
     SetRepeat(String),
+    SetNormalize(bool),
 }
 
 pub struct Restore {
@@ -729,6 +821,9 @@ impl Player {
             .name("finalboss-player".into())
             .spawn(move || {
                 let mut engine = Engine::new(make_backend(), seed);
+                if let Some(path) = &persist_path {
+                    engine.load_settings(&path.with_file_name("settings.json"));
+                }
                 if let Some(restore) = restore {
                     engine.set_queue_scope(&restore.scope);
                     engine.restore(restore.items, restore.start, restore.position_ms);
@@ -826,6 +921,10 @@ fn apply(engine: &mut Engine, cmd: Cmd) -> Result<(), PlayError> {
             Ok(())
         }
         Cmd::SetRepeat(mode) => engine.set_repeat(&mode),
+        Cmd::SetNormalize(enabled) => {
+            engine.set_normalize(enabled);
+            Ok(())
+        }
     }
 }
 

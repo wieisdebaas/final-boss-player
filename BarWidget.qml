@@ -7,6 +7,7 @@ import qs.Ui
 // (`player`); this file never talks to the daemon socket directly except
 // through the service's request() for the cached album art path.
 //
+//   hover        title and artist
 //   left click   toggle the mini-player popup
 //   middle click play / pause
 //   right click  open the full player panel
@@ -39,6 +40,18 @@ BarWidget {
     ? Number(player.playerState.duration_ms) : 0
   readonly property real progress: durationMs > 0
     ? Math.max(0, Math.min(1, positionMs / durationMs)) : 0
+  readonly property real volume: player && player.playerState
+    ? Math.max(0, Math.min(1, Number(player.playerState.volume) || 0)) : 0
+  readonly property bool shuffleOn: !!player && player.shuffle === true
+
+  readonly property string hoverLabel: {
+    if (!hasMedia) return ""
+    if (title !== "" && artist !== "") return title + "\n" + artist
+    return title !== "" ? title : artist
+  }
+  // The bar only shows a tooltip while this stays true. The popup already
+  // shows the track, so hovering the slot then stays quiet.
+  readonly property bool tooltipHovered: barHover.containsMouse && !popupOpen && hoverLabel !== ""
 
   moduleName: pluginId
   implicitWidth: row.implicitWidth + Style.space(14)
@@ -48,9 +61,22 @@ BarWidget {
   function open() { popupOpen = true }
   function togglePopup() { popupOpen = !popupOpen }
 
+  function syncTooltip() {
+    if (!bar) return
+    if (tooltipHovered && bar.showTooltip) bar.showTooltip(root, hoverLabel)
+    else if (bar.hideTooltip) bar.hideTooltip(root)
+  }
+
   function openPanel() {
     popupOpen = false
     if (root.bar && root.bar.shell) root.bar.shell.toggle(root.pluginId, "{}")
+  }
+
+  function volumeGlyph() {
+    if (root.volume <= 0.001) return "󰖁"
+    if (root.volume < 0.34) return "󰕿"
+    if (root.volume < 0.67) return "󰖀"
+    return "󰕾"
   }
 
   // Fetch the cached cover for the current album once per album change.
@@ -76,41 +102,43 @@ BarWidget {
     if (!connected) { artPath = ""; artAlbumId = -1 }
     else refreshArt()
   }
-  onPopupOpenChanged: if (popupOpen) refreshArt()
+  onPopupOpenChanged: {
+    if (popupOpen) refreshArt()
+    syncTooltip()
+  }
+  onHoverLabelChanged: syncTooltip()
   Component.onCompleted: refreshArt()
+  Component.onDestruction: if (bar && bar.hideTooltip) bar.hideTooltip(root)
 
   Row {
     id: row
     anchors.centerIn: parent
     spacing: Style.space(6)
 
-    SizedImage {
+    OpticalGlyph {
       id: logo
       anchors.verticalCenter: parent.verticalCenter
-      width: Math.max(Style.font.iconLarge, root.barSize - Style.space(4))
+      width: Style.bar.iconCanvas
       height: width
-      url: Qt.resolvedUrl("icon.png")
-      opacity: root.connected ? 1 : 0.5
-    }
-
-    Text {
-      anchors.verticalCenter: parent.verticalCenter
-      visible: !root.vertical && root.hasMedia && root.title !== ""
-      width: visible ? Math.min(implicitWidth, Style.space(160)) : 0
-      elide: Text.ElideRight
-      textFormat: Text.PlainText
+      implicitWidth: width
+      implicitHeight: height
+      text: "󰝚"
+      fontFamily: root.bar ? root.bar.fontFamily : Style.font.family
+      fontSize: Style.bar.iconFont
+      paintedSize: Style.bar.iconSize
       color: root.foreground
-      opacity: root.isPlaying ? 1 : 0.7
-      font.family: root.bar ? root.bar.fontFamily : ""
-      font.pixelSize: Style.font.body
-      text: root.title
+      opacity: root.connected ? 1 : 0.5
     }
   }
 
   MouseArea {
+    id: barHover
     anchors.fill: parent
+    hoverEnabled: true
     cursorShape: Qt.PointingHandCursor
     acceptedButtons: Qt.LeftButton | Qt.MiddleButton | Qt.RightButton
+    onEntered: root.syncTooltip()
+    onExited: if (root.bar && root.bar.hideTooltip) root.bar.hideTooltip(root)
     onClicked: function(mouse) {
       if (mouse.button === Qt.MiddleButton) {
         if (root.player) root.player.toggle()
@@ -265,6 +293,75 @@ BarWidget {
             enabled: root.connected
             opacity: enabled ? 1.0 : 0.4
             onClicked: if (root.player) root.player.next()
+          }
+
+          Item {
+            width: Style.space(8)
+            height: 1
+          }
+
+          Button {
+            iconText: "󰒝"
+            foreground: root.shuffleOn ? Commons.Color.accent : root.foreground
+            active: root.shuffleOn
+            horizontalPadding: Style.spacing.controlPaddingX
+            verticalPadding: Style.spacing.controlPaddingY
+            iconSize: Style.font.iconLarge
+            enabled: root.connected
+            opacity: enabled ? 1.0 : 0.4
+            onClicked: if (root.player) root.player.toggleShuffle()
+          }
+        }
+
+        Item {
+          id: volumeRow
+          width: parent.width
+          height: Math.max(volumeButton.implicitHeight, volumeSlider.implicitHeight)
+          opacity: root.connected ? 1 : 0.4
+
+          Item {
+            id: volumeButton
+            width: Style.space(28)
+            height: parent.height
+            anchors.left: parent.left
+            anchors.verticalCenter: parent.verticalCenter
+
+            Text {
+              anchors.centerIn: parent
+              text: root.volumeGlyph()
+              color: volumeHit.containsMouse ? Commons.Color.accent : root.foreground
+              font.family: root.bar ? root.bar.fontFamily : Style.font.family
+              font.pixelSize: Style.font.iconLarge
+            }
+
+            MouseArea {
+              id: volumeHit
+              anchors.fill: parent
+              enabled: root.connected
+              hoverEnabled: true
+              cursorShape: Qt.PointingHandCursor
+              onClicked: if (root.player) root.player.toggleMute()
+            }
+          }
+
+          PanelSlider {
+            id: volumeSlider
+            bar: root.bar
+            anchors.left: volumeButton.right
+            anchors.right: parent.right
+            anchors.verticalCenter: parent.verticalCenter
+            anchors.leftMargin: Style.space(2)
+            minimum: 0
+            maximum: 1
+            step: 0.05
+            value: root.volume
+            enabled: root.connected
+            opacity: root.volume <= 0.001 ? 0.45 : 1
+            trackColor: Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.18)
+            fillColor: Commons.Color.accent
+            knobColor: Commons.Color.accent
+            onMoved: function(v) { if (root.player) root.player.setVolume(v) }
+            onRightClicked: if (root.player) root.player.toggleMute()
           }
         }
 

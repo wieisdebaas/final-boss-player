@@ -325,6 +325,7 @@ async fn dispatch(line: &str, context: &ServerContext) -> ServerMessage {
                 | "set_volume"
                 | "set_shuffle"
                 | "set_repeat"
+                | "set_normalize"
         )
     ) {
         return error_response(id, "unknown_command", "command is not supported");
@@ -373,6 +374,9 @@ async fn dispatch(line: &str, context: &ServerContext) -> ServerMessage {
             playback(request.id, context, Cmd::SetShuffle(enabled)).await
         }
         Command::SetRepeat { mode } => playback(request.id, context, Cmd::SetRepeat(mode)).await,
+        Command::SetNormalize { enabled } => {
+            playback(request.id, context, Cmd::SetNormalize(enabled)).await
+        }
     }
 }
 

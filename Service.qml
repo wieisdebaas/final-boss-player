@@ -39,6 +39,7 @@ Item {
     volume: 1.0,
     shuffle: false,
     repeat: "off",
+    normalize: false,
     scan: null,
     folders: [],
     error_code: null,
@@ -51,6 +52,7 @@ Item {
   readonly property bool connected: backend.connected
   readonly property bool playing: playerState.playing === true
   readonly property bool shuffle: playerState.shuffle === true
+  readonly property bool normalize: playerState.normalize === true
   readonly property var track: playerState.track || null
   readonly property string title: track && track.title ? String(track.title) : ""
   readonly property string artist: track && track.artist ? String(track.artist) : ""
@@ -65,6 +67,18 @@ Item {
   property bool uiVisible: false
 
   signal operationFailed(string reason)
+  // Lists bump this when their rows appear, hide, or switch between rows and tiles.
+  signal keyboardLayoutChanged()
+  property int textEditors: 0
+  readonly property bool textEditing: textEditors > 0
+
+  function setTextEditing(active) {
+    textEditors = Math.max(0, textEditors + (active ? 1 : -1))
+  }
+
+  function noteKeyboard() {
+    keyboardLayoutChanged()
+  }
 
   function navigate(page) {
     var next = String(page || "")
@@ -103,6 +117,36 @@ Item {
       name: track.artist || "Unknown artist"
     })
     return true
+  }
+
+  // Bumped when the footer asks a list to scroll to the playing track.
+  property int playingReveal: 0
+  property string playingRevealPage: ""
+
+  // Open the list this queue was started from: album, artist, or library.
+  function openPlayingContext() {
+    if (!hasMedia || !track) return false
+    var scope = playerState && playerState.scope ? String(playerState.scope) : "album"
+    var opened = false
+    var page = "albums"
+    if (scope === "library") {
+      page = "library"
+      opened = navigate("library")
+    } else if (scope === "artist") {
+      page = "artists"
+      opened = openArtistFromTrack(track)
+    } else {
+      opened = openAlbumFromTrack(track)
+    }
+    if (!opened && scope !== "album") {
+      page = "albums"
+      opened = openAlbumFromTrack(track)
+    }
+    if (opened) {
+      playingRevealPage = page
+      playingReveal++
+    }
+    return opened
   }
 
   function focusSearch() {
@@ -239,6 +283,9 @@ Item {
   }
   function setRepeat(mode) {
     return request("set_repeat", { mode: String(mode || "off") }, null)
+  }
+  function setNormalize(enabled) {
+    return request("set_normalize", { enabled: enabled === true }, null)
   }
 
   function applyState(next) {

@@ -2,6 +2,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Controls
 import qs.Commons
+import "listkeys.js" as ListKeys
 
 // Album and artist rows, or a cover grid when the service is in tiles mode.
 // `secondaryOf` builds the subtitle. Emits activated(item) on click and
@@ -25,6 +26,62 @@ Item {
 
   signal activated(var item)
   signal playRequested(var item)
+
+  property int keyboardIndex: -1
+  property bool keyboardFocused: false
+  readonly property int keyboardCount: Array.isArray(items) ? items.length : 0
+  readonly property int keyboardStride: tiled ? cellHeight : 52
+
+  function publishKeyboard() {
+    if (keyboardIndex >= keyboardCount)
+      keyboardIndex = keyboardCount > 0 ? keyboardCount - 1 : -1
+    if (service) service.noteKeyboard()
+  }
+
+  function revealKeyboard() {
+    if (keyboardIndex < 0) return
+    var view = tiled ? grid : rows
+    view.positionViewAtIndex(keyboardIndex, tiled ? GridView.Contain : ListView.Contain)
+  }
+
+  function moveKeyboard(dx, dy) {
+    var result = ListKeys.move(keyboardIndex, keyboardCount,
+      ListKeys.columnsOf(tiled, columnCount), dx, dy)
+    if (result.edge === "") {
+      keyboardIndex = result.index
+      revealKeyboard()
+    }
+    return result.edge
+  }
+
+  function pageKeyboard(direction) {
+    var rowsHigh = Math.max(1, Math.floor(height / Math.max(1, keyboardStride)))
+    keyboardIndex = ListKeys.page(keyboardIndex, keyboardCount,
+      ListKeys.columnsOf(tiled, columnCount), rowsHigh, direction)
+    revealKeyboard()
+  }
+
+  function jumpKeyboardStart() {
+    keyboardIndex = keyboardCount > 0 ? 0 : -1
+    revealKeyboard()
+  }
+
+  function jumpKeyboardEnd() {
+    keyboardIndex = keyboardCount > 0 ? keyboardCount - 1 : -1
+    revealKeyboard()
+  }
+
+  function activateKeyboard() {
+    if (keyboardIndex < 0 || keyboardIndex >= keyboardCount) return
+    activated(items[keyboardIndex])
+  }
+
+  onKeyboardCountChanged: publishKeyboard()
+  onVisibleChanged: publishKeyboard()
+  onTiledChanged: {
+    revealKeyboard()
+    publishKeyboard()
+  }
 
   function artCommand(entityId) {
     if (coverKind === "artist") return ["get_artist_art", { artist_id: entityId }]
@@ -78,13 +135,19 @@ Item {
     Rectangle {
       id: row
       required property var modelData
+      required property int index
+      readonly property bool keyboardHere: root.keyboardFocused && index === root.keyboardIndex
 
       width: ListView.view.width
       height: 52
       radius: 6
-      color: rowArea.containsMouse
-        ? Qt.rgba(Color.foreground.r, Color.foreground.g, Color.foreground.b, 0.08)
-        : "transparent"
+      border.width: row.keyboardHere ? 1 : 0
+      border.color: Color.accent
+      color: row.keyboardHere
+        ? Qt.rgba(Color.accent.r, Color.accent.g, Color.accent.b, 0.2)
+        : (rowArea.containsMouse
+          ? Qt.rgba(Color.foreground.r, Color.foreground.g, Color.foreground.b, 0.08)
+          : "transparent")
 
       property string artPath: ""
       property int artEntityId: -1
@@ -191,6 +254,8 @@ Item {
     Item {
       id: tile
       required property var modelData
+      required property int index
+      readonly property bool keyboardHere: root.keyboardFocused && index === root.keyboardIndex
 
       width: GridView.view.cellWidth
       height: GridView.view.cellHeight
@@ -224,9 +289,13 @@ Item {
         anchors.fill: parent
         anchors.margins: 6
         radius: 8
-        color: tileArea.containsMouse
-          ? Qt.rgba(Color.foreground.r, Color.foreground.g, Color.foreground.b, 0.08)
-          : "transparent"
+        color: tile.keyboardHere
+          ? Qt.rgba(Color.accent.r, Color.accent.g, Color.accent.b, 0.2)
+          : (tileArea.containsMouse
+            ? Qt.rgba(Color.foreground.r, Color.foreground.g, Color.foreground.b, 0.08)
+            : "transparent")
+        border.width: tile.keyboardHere ? 1 : 0
+        border.color: Color.accent
 
         Rectangle {
           id: cover

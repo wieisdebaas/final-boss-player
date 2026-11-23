@@ -152,6 +152,8 @@ pub struct PlaybackUpdate {
     pub repeat: String,
     pub error_code: Option<String>,
     pub error_message: Option<String>,
+    pub scope: String,
+    pub normalize: bool,
 }
 
 impl PlaybackUpdate {
@@ -173,6 +175,8 @@ impl AppState {
         snapshot.volume = update.volume;
         snapshot.shuffle = update.shuffle;
         snapshot.repeat = update.repeat;
+        snapshot.scope = update.scope;
+        snapshot.normalize = update.normalize;
         // Playback must not clear a scan failure, but owns its own errors.
         if update.error_code.is_some() || snapshot.error_code.as_deref() != Some("scan_failed") {
             snapshot.error_code = update.error_code;
@@ -204,5 +208,7 @@ pub fn initial_player_state() -> PlayerState {
         error_code: None,
         error_message: None,
         generation: 0,
+        scope: "album".into(),
+        normalize: false,
     }
 }

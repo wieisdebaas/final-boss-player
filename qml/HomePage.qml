@@ -15,6 +15,7 @@ Item {
   property bool loading: false
   property string errorText: ""
   readonly property int sectionLimit: 8
+  readonly property var keyboardLists: [albumList, trackList]
   readonly property int revision: service ? service.libraryRevision : 0
   readonly property bool connected: service ? service.connected : false
 
@@ -83,6 +84,7 @@ Item {
       text: "Albums"
     }
     EntityList {
+      id: albumList
       Layout.fillWidth: true
       Layout.fillHeight: true
       items: root.albums
@@ -106,6 +108,7 @@ Item {
       text: "Tracks"
     }
     TrackList {
+      id: trackList
       Layout.fillWidth: true
       Layout.fillHeight: true
       service: root.service

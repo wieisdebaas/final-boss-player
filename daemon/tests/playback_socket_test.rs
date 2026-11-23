@@ -5,6 +5,9 @@ mod art;
 #[path = "../src/db.rs"]
 mod db;
 #[allow(dead_code)]
+#[path = "../src/loudness.rs"]
+mod loudness;
+#[allow(dead_code)]
 #[path = "../src/meta.rs"]
 mod meta;
 #[allow(dead_code)]
@@ -387,6 +390,7 @@ async fn play_scope_keeps_album_and_artist_queues_and_opens_the_library() {
     );
     assert_eq!(client.call(json!({ "cmd": "next" })).await["ok"], true);
     assert_eq!(client.state().await["track"]["title"], "Ada Two");
+    assert_eq!(client.state().await["scope"], "album");
     assert_eq!(client.call(json!({ "cmd": "next" })).await["ok"], true);
     assert_eq!(client.state().await["track"]["title"], "Ada Two");
 
@@ -399,6 +403,7 @@ async fn play_scope_keeps_album_and_artist_queues_and_opens_the_library() {
     );
     assert_eq!(client.call(json!({ "cmd": "next" })).await["ok"], true);
     assert_eq!(client.state().await["track"]["title"], "Ada Beta");
+    assert_eq!(client.state().await["scope"], "artist");
 
     // Library play continues across artists. Title order after Ada Two is Bea One.
     assert_eq!(
@@ -409,6 +414,7 @@ async fn play_scope_keeps_album_and_artist_queues_and_opens_the_library() {
     );
     assert_eq!(client.call(json!({ "cmd": "next" })).await["ok"], true);
     assert_eq!(client.state().await["track"]["title"], "Bea One");
+    assert_eq!(client.state().await["scope"], "library");
 
     let restore = server::load_restore(&db_path, &temp.path().join(server::PLAYBACK_FILE)).unwrap();
     assert_eq!(restore.items.len(), 4);

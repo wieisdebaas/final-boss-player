@@ -18,6 +18,7 @@ Item {
   readonly property var selected: service ? service.selectedAlbum : null
   readonly property int revision: service ? service.libraryRevision : 0
   readonly property bool connected: service ? service.connected : false
+  readonly property var keyboardLists: selected ? [trackList] : [albumList]
 
   property string artPath: ""
   property int artAlbumId: -1
@@ -201,6 +202,7 @@ Item {
     }
 
     EntityList {
+      id: albumList
       Layout.fillWidth: true
       Layout.fillHeight: true
       visible: root.selected === null
@@ -218,12 +220,14 @@ Item {
     }
 
     TrackList {
+      id: trackList
       Layout.fillWidth: true
       Layout.fillHeight: true
       visible: root.selected !== null
       service: root.service
       tracks: root.tracks
       queueScope: "album"
+      revealPage: "albums"
       emptyText: root.loading ? "" : "No tracks"
     }
   }

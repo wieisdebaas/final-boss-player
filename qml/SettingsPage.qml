@@ -1,5 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
+import QtQuick.Controls
 import Quickshell
 import qs.Commons
 
@@ -26,6 +27,17 @@ Item {
     statusText = ok ? success : String(error || "Request failed")
   }
 
+  function scrollBy(delta) {
+    var maxY = Math.max(0, flick.contentHeight - flick.height)
+    flick.contentY = Math.max(0, Math.min(maxY, flick.contentY + delta))
+  }
+
+  function scrollTo(top) {
+    flick.contentY = top ? 0 : Math.max(0, flick.contentHeight - flick.height)
+  }
+
+  readonly property int scrollPage: Math.max(48, Math.floor(flick.height * 0.9))
+
   function submitFolder() {
     var path = pathInput.text.trim()
     if (path === "") return
@@ -41,9 +53,29 @@ Item {
     })
   }
 
-  Column {
+  Flickable {
+    id: flick
     anchors.fill: parent
-    anchors.margins: 20
+    clip: true
+    contentWidth: width
+    contentHeight: column.y + column.implicitHeight + 20
+    boundsBehavior: Flickable.StopAtBounds
+    ScrollBar.vertical: ScrollBar {
+      policy: ScrollBar.AsNeeded
+      width: 10
+      contentItem: Rectangle {
+        implicitWidth: 6
+        radius: 3
+        color: Qt.rgba(Color.foreground.r, Color.foreground.g, Color.foreground.b,
+                       parent.hovered || parent.pressed ? 0.45 : 0.28)
+      }
+    }
+
+    Column {
+    id: column
+    x: 20
+    y: 20
+    width: flick.width - 40
     spacing: 16
 
     Row {
@@ -83,6 +115,33 @@ Item {
       color: Color.foreground
       font.pixelSize: 14
       font.bold: true
+      text: "Playback"
+    }
+
+    Row {
+      width: parent.width
+      spacing: 12
+      PillButton {
+        id: sameVolume
+        filled: !!(root.service && root.service.normalize)
+        label: root.service && root.service.normalize ? "Same volume on" : "Same volume off"
+        enabled: !!(root.service && root.service.connected)
+        onClicked: if (root.service) root.service.setNormalize(!root.service.normalize)
+      }
+      Text {
+        width: Math.max(0, parent.width - sameVolume.width - 12)
+        anchors.verticalCenter: parent.verticalCenter
+        wrapMode: Text.Wrap
+        color: Color.muted
+        font.pixelSize: 12
+        text: "Play each song at a similar loudness. The volume slider still sets the overall level."
+      }
+    }
+
+    Text {
+      color: Color.foreground
+      font.pixelSize: 14
+      font.bold: true
       text: "Music folders"
     }
 
@@ -106,6 +165,7 @@ Item {
           clip: true
           selectByMouse: true
           onAccepted: root.submitFolder()
+          onActiveFocusChanged: if (root.service) root.service.setTextEditing(activeFocus)
           Text {
             anchors.fill: parent
             verticalAlignment: Text.AlignVCenter
@@ -173,6 +233,11 @@ Item {
       color: root.statusIsError ? Color.urgent : Color.muted
       font.pixelSize: 12
       text: root.statusText
+    }
+
+    KeyboardHelp {
+      width: parent.width
+    }
     }
   }
 }

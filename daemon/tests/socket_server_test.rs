@@ -5,6 +5,9 @@ mod art;
 #[path = "../src/db.rs"]
 mod db;
 #[allow(dead_code)]
+#[path = "../src/loudness.rs"]
+mod loudness;
+#[allow(dead_code)]
 #[path = "../src/meta.rs"]
 mod meta;
 #[allow(dead_code)]

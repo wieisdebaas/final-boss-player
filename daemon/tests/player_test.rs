@@ -2,6 +2,9 @@
 #[path = "../src/db.rs"]
 mod db;
 #[allow(dead_code)]
+#[path = "../src/loudness.rs"]
+mod loudness;
+#[allow(dead_code)]
 #[path = "../src/meta.rs"]
 mod meta;
 #[allow(dead_code)]
@@ -316,6 +319,21 @@ fn engine_next_with_nothing_playable_left_stops_with_error() {
         engine.view().error_code.as_deref(),
         Some("file_unavailable")
     );
+}
+
+#[test]
+fn same_volume_switch_is_reported_and_remembered() {
+    let dir = tempdir().unwrap();
+    let (mut engine, _) = engine();
+    assert!(!engine.view().normalize);
+    let path = dir.path().join("settings.json");
+    engine.load_settings(&path);
+    engine.set_normalize(true);
+    assert!(engine.view().normalize);
+    let saved = std::fs::read_to_string(&path).unwrap();
+    assert!(saved.contains("true"));
+    engine.set_normalize(false);
+    assert!(!engine.view().normalize);
 }
 
 #[test]

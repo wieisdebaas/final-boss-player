@@ -1,5 +1,6 @@
 pub mod art;
 pub mod db;
+pub mod loudness;
 pub mod meta;
 pub mod mpris;
 mod paths;

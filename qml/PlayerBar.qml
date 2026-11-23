@@ -137,12 +137,23 @@ Rectangle {
       anchors.verticalCenter: parent.verticalCenter
       spacing: 2
       Text {
+        id: footerTitle
         width: parent.width
         elide: Text.ElideRight
-        color: Color.foreground
+        color: footerTitleArea.containsMouse && footerTitleArea.enabled
+          ? Color.accent : Color.foreground
         font.pixelSize: 14
         font.bold: true
+        font.underline: footerTitleArea.containsMouse && footerTitleArea.enabled
         text: root.service && root.service.hasMedia ? root.service.title : "Nothing playing"
+        MouseArea {
+          id: footerTitleArea
+          anchors.fill: parent
+          hoverEnabled: true
+          enabled: !!(root.service && root.service.hasMedia)
+          cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
+          onClicked: if (root.service) root.service.openPlayingContext()
+        }
       }
       Row {
         id: footerByline
@@ -203,7 +214,7 @@ Rectangle {
             hoverEnabled: true
             cursorShape: footerByline.hasAlbum ? Qt.PointingHandCursor : Qt.ArrowCursor
             enabled: footerByline.hasAlbum
-            onClicked: if (root.service) root.service.openAlbumFromTrack(root.trackInfo)
+            onClicked: if (root.service) root.service.openPlayingContext()
           }
         }
       }

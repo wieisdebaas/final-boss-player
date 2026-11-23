@@ -20,6 +20,11 @@ Item {
   readonly property string pluginId: manifest && manifest.id
     ? String(manifest.id) : "io.github.finalboss.player"
   readonly property string currentPage: service ? service.currentPage : "home"
+  // "menu" highlights the sidebar. "list" highlights the page list.
+  property string keyRegion: "list"
+  property int menuIndex: 0
+  property int contentSlot: 0
+  property var focusedList: null
 
   readonly property var sidebarItems: [
     { page: "home", label: "Home" },
@@ -40,7 +45,11 @@ Item {
     }
     closingFromHost = false
     opened = true
-    Qt.callLater(function() { focusScope.forceActiveFocus() })
+    Qt.callLater(function() {
+      root.keyRegion = "list"
+      focusScope.forceActiveFocus()
+      root.ensureList()
+    })
   }
 
   function close() {
@@ -54,6 +63,193 @@ Item {
     if (shell && typeof shell.hide === "function") shell.hide(pluginId)
     else close()
   }
+
+  function clampMenu(index) {
+    var count = sidebarItems.length
+    if (count <= 0) return 0
+    if (index < 0) return 0
+    if (index >= count) return count - 1
+    return index
+  }
+
+  function menuPageCount() {
+    return Math.max(1, Math.floor(sidebar.height / 40))
+  }
+
+  function pageLists() {
+    var page = null
+    if (currentPage === "home") page = homePage
+    else if (currentPage === "search") page = searchPage
+    else if (currentPage === "library") page = libraryPage
+    else if (currentPage === "artists") page = artistPage
+    else if (currentPage === "albums") page = albumPage
+    if (!page || !page.keyboardLists) return []
+    var raw = page.keyboardLists
+    var out = []
+    for (var i = 0; i < raw.length; ++i) {
+      var list = raw[i]
+      if (list && list.visible && list.keyboardCount > 0) out.push(list)
+    }
+    return out
+  }
+
+  function setFocusedList(list) {
+    if (focusedList && focusedList !== list) focusedList.keyboardFocused = false
+    focusedList = list
+    if (list) list.keyboardFocused = true
+  }
+
+  function ensureList() {
+    if (keyRegion !== "list") {
+      setFocusedList(null)
+      return
+    }
+    var lists = pageLists()
+    var slot = -1
+    for (var i = 0; i < lists.length; ++i) {
+      if (lists[i] === focusedList) slot = i
+    }
+    if (slot >= 0) {
+      contentSlot = slot
+      if (focusedList.keyboardIndex < 0) focusedList.jumpKeyboardStart()
+      setFocusedList(focusedList)
+      return
+    }
+    contentSlot = 0
+    if (lists.length === 0) {
+      setFocusedList(null)
+      return
+    }
+    lists[0].jumpKeyboardStart()
+    setFocusedList(lists[0])
+  }
+
+  function focusRegion(region) {
+    keyRegion = region
+    focusScope.forceActiveFocus()
+    ensureList()
+  }
+
+  // Tab leaves a text field for the list. Shift+Tab leaves it for the sidebar.
+  // Otherwise Tab and Shift+Tab switch between those two.
+  function moveRegion(toList) {
+    if (service && service.textEditing) focusRegion(toList ? "list" : "menu")
+    else focusRegion(keyRegion === "menu" ? "list" : "menu")
+  }
+
+  function moveInLists(dx, dy) {
+    var lists = pageLists()
+    if (lists.length === 0) {
+      if (currentPage === "settings" && dy !== 0) settingsPage.scrollBy(dy * 48)
+      return
+    }
+    if (contentSlot < 0 || contentSlot >= lists.length) contentSlot = 0
+    var list = lists[contentSlot]
+    if (dx !== 0 && !list.tiled) return
+    var edge = list.moveKeyboard(dx, dy)
+    if (dy < 0 && edge === "start" && contentSlot > 0) {
+      contentSlot -= 1
+      lists[contentSlot].jumpKeyboardEnd()
+      setFocusedList(lists[contentSlot])
+      return
+    }
+    if (dy > 0 && edge === "end" && contentSlot + 1 < lists.length) {
+      contentSlot += 1
+      lists[contentSlot].jumpKeyboardStart()
+      setFocusedList(lists[contentSlot])
+      return
+    }
+    setFocusedList(list)
+  }
+
+  function movePage(direction) {
+    if (keyRegion === "menu") {
+      menuIndex = clampMenu(menuIndex + direction * menuPageCount())
+      return
+    }
+    var lists = pageLists()
+    if (lists.length === 0) {
+      if (currentPage === "settings") settingsPage.scrollBy(direction * settingsPage.scrollPage)
+      return
+    }
+    if (contentSlot < 0 || contentSlot >= lists.length) contentSlot = 0
+    lists[contentSlot].pageKeyboard(direction)
+    setFocusedList(lists[contentSlot])
+  }
+
+  function jumpEdge(toStart) {
+    if (keyRegion === "menu") {
+      menuIndex = toStart ? 0 : Math.max(0, sidebarItems.length - 1)
+      return
+    }
+    var lists = pageLists()
+    if (lists.length === 0) {
+      if (currentPage === "settings") settingsPage.scrollTo(toStart)
+      return
+    }
+    if (contentSlot < 0 || contentSlot >= lists.length) contentSlot = 0
+    if (toStart) lists[contentSlot].jumpKeyboardStart()
+    else lists[contentSlot].jumpKeyboardEnd()
+    setFocusedList(lists[contentSlot])
+  }
+
+  function activateKey() {
+    if (keyRegion === "menu") {
+      if (service && menuIndex >= 0 && menuIndex < sidebarItems.length)
+        service.navigate(sidebarItems[menuIndex].page)
+      return
+    }
+    var lists = pageLists()
+    if (contentSlot < 0 || contentSlot >= lists.length) return
+    lists[contentSlot].activateKeyboard()
+  }
+
+  function handleKey(event) {
+    if (service && service.textEditing) return
+    var key = event.key
+    var ctrl = (event.modifiers & Qt.ControlModifier) !== 0
+    if (key === Qt.Key_Up) {
+      if (keyRegion === "menu") menuIndex = clampMenu(menuIndex - 1)
+      else moveInLists(0, -1)
+      event.accepted = true
+      return
+    }
+    if (key === Qt.Key_Down) {
+      if (keyRegion === "menu") menuIndex = clampMenu(menuIndex + 1)
+      else moveInLists(0, 1)
+      event.accepted = true
+      return
+    }
+    if (key === Qt.Key_Left) {
+      if (ctrl) {
+        if (service) service.previous()
+      } else if (keyRegion === "list") {
+        moveInLists(-1, 0)
+      }
+      event.accepted = true
+      return
+    }
+    if (key === Qt.Key_Right) {
+      if (ctrl) {
+        if (service) service.next()
+      } else if (keyRegion === "list") {
+        moveInLists(1, 0)
+      }
+      event.accepted = true
+      return
+    }
+    if (key === Qt.Key_PageUp) { movePage(-1); event.accepted = true; return }
+    if (key === Qt.Key_PageDown) { movePage(1); event.accepted = true; return }
+    if (ctrl && key === Qt.Key_Home) { jumpEdge(true); event.accepted = true; return }
+    if (ctrl && key === Qt.Key_End) { jumpEdge(false); event.accepted = true; return }
+    if (key === Qt.Key_Return || key === Qt.Key_Enter) {
+      activateKey()
+      event.accepted = true
+    }
+  }
+
+  onCurrentPageChanged: Qt.callLater(function() { root.ensureList() })
+  Component.onCompleted: Qt.callLater(function() { root.ensureList() })
 
   FloatingWindow {
     id: window
@@ -81,12 +277,31 @@ Item {
         }
       }
 
+      Connections {
+        target: root.service
+        function onKeyboardLayoutChanged() {
+          Qt.callLater(function() { root.ensureList() })
+        }
+      }
+
+      Keys.onPressed: function(event) { root.handleKey(event) }
+
       // Window shortcuts receive ShortcutOverride events before focused text
       // inputs can consume editing keys.
       Shortcut {
         sequence: "Space"
         context: Qt.WindowShortcut
         onActivated: if (root.service) root.service.toggle()
+      }
+      Shortcut {
+        sequence: "Ctrl+P"
+        context: Qt.WindowShortcut
+        onActivated: if (root.service) root.service.previous()
+      }
+      Shortcut {
+        sequence: "Ctrl+N"
+        context: Qt.WindowShortcut
+        onActivated: if (root.service) root.service.next()
       }
       Shortcut {
         sequence: "Ctrl+Left"
@@ -119,9 +334,14 @@ Item {
         onActivated: if (root.service) root.service.volumeBy(-0.05)
       }
       Shortcut {
-        sequence: "M"
+        sequence: "Ctrl+M"
         context: Qt.WindowShortcut
         onActivated: if (root.service) root.service.toggleMute()
+      }
+      Shortcut {
+        sequence: "Ctrl+S"
+        context: Qt.WindowShortcut
+        onActivated: if (root.service) root.service.toggleShuffle()
       }
       Shortcut {
         sequence: "Ctrl+F"
@@ -132,6 +352,16 @@ Item {
         sequence: "Escape"
         context: Qt.WindowShortcut
         onActivated: root.requestClose()
+      }
+      Shortcut {
+        sequence: "Tab"
+        context: Qt.WindowShortcut
+        onActivated: root.moveRegion(true)
+      }
+      Shortcut {
+        sequence: "Shift+Tab"
+        context: Qt.WindowShortcut
+        onActivated: root.moveRegion(false)
       }
 
       Row {
@@ -179,10 +409,14 @@ Item {
               delegate: Rectangle {
                 id: item
                 required property var modelData
+                required property int index
                 readonly property bool selected: root.currentPage === modelData.page
+                readonly property bool keyHere: root.keyRegion === "menu" && index === root.menuIndex
                 width: parent.width
                 height: 36
                 radius: 6
+                border.width: keyHere ? 1 : 0
+                border.color: Color.accent
                 color: selected
                   ? Qt.rgba(Color.accent.r, Color.accent.g, Color.accent.b, 0.18)
                   : (itemArea.containsMouse
@@ -213,31 +447,37 @@ Item {
           height: parent.height
 
           HomePage {
+            id: homePage
             anchors.fill: parent
             visible: root.currentPage === "home"
             service: root.service
           }
           SearchPage {
+            id: searchPage
             anchors.fill: parent
             visible: root.currentPage === "search"
             service: root.service
           }
           LibraryPage {
+            id: libraryPage
             anchors.fill: parent
             visible: root.currentPage === "library"
             service: root.service
           }
           ArtistPage {
+            id: artistPage
             anchors.fill: parent
             visible: root.currentPage === "artists"
             service: root.service
           }
           AlbumPage {
+            id: albumPage
             anchors.fill: parent
             visible: root.currentPage === "albums"
             service: root.service
           }
           SettingsPage {
+            id: settingsPage
             anchors.fill: parent
             visible: root.currentPage === "settings"
             service: root.service

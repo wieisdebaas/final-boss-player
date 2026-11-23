@@ -16,6 +16,7 @@ Item {
   readonly property string queryText: service ? service.searchQuery : ""
   readonly property int focusRequest: service ? service.searchFocusRequest : 0
   readonly property bool connected: service ? service.connected : false
+  readonly property var keyboardLists: [resultList]
 
   function runSearch() {
     var text = queryText.trim()
@@ -102,6 +103,7 @@ Item {
         clip: true
         text: root.queryText
         onTextChanged: if (root.service && root.service.searchQuery !== text) root.service.searchQuery = text
+        onActiveFocusChanged: if (root.service) root.service.setTextEditing(activeFocus)
 
         Text {
           anchors.verticalCenter: parent.verticalCenter
@@ -122,6 +124,7 @@ Item {
     }
 
     TrackList {
+      id: resultList
       Layout.fillWidth: true
       Layout.fillHeight: true
       service: root.service

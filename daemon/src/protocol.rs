@@ -63,6 +63,9 @@ pub enum Command {
     SetRepeat {
         mode: String,
     },
+    SetNormalize {
+        enabled: bool,
+    },
     GetArt {
         album_id: i64,
     },
@@ -108,6 +111,16 @@ pub struct PlayerState {
     pub error_code: Option<String>,
     pub error_message: Option<String>,
     pub generation: u64,
+    /// Queue the current track belongs to: "album", "artist", or "library".
+    #[serde(default = "default_scope")]
+    pub scope: String,
+    /// When set, each track is gained so songs play at a similar loudness.
+    #[serde(default)]
+    pub normalize: bool,
+}
+
+fn default_scope() -> String {
+    "album".into()
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

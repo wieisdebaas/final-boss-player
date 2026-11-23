@@ -2,6 +2,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Controls
 import qs.Commons
+import "listkeys.js" as ListKeys
 
 // Reusable track rows, or cover tiles when the service is in tiles mode.
 // Row / title click plays/toggles; artist and album links only activate
@@ -15,6 +16,8 @@ Item {
   property bool showNumbers: true
   // Queue built when a row is played: "album", "artist", or "library".
   property string queueScope: "album"
+  // Which footer jump this list answers: "albums", "artists", or "library".
+  property string revealPage: ""
 
   readonly property int currentId: service && service.track && service.track.id !== undefined
     ? Number(service.track.id) : -1
@@ -31,6 +34,110 @@ Item {
 
   function playTrack(track) {
     if (service) service.playOrToggle(Number(track.id), queueScope, null)
+  }
+
+  property int keyboardIndex: -1
+  property bool keyboardFocused: false
+  readonly property int keyboardCount: Array.isArray(tracks) ? tracks.length : 0
+  readonly property int keyboardStride: tiled ? cellHeight : 44
+
+  function publishKeyboard() {
+    if (keyboardIndex >= keyboardCount)
+      keyboardIndex = keyboardCount > 0 ? keyboardCount - 1 : -1
+    if (service) service.noteKeyboard()
+  }
+
+  function revealKeyboard() {
+    if (keyboardIndex < 0) return
+    var view = tiled ? grid : rows
+    view.positionViewAtIndex(keyboardIndex, tiled ? GridView.Contain : ListView.Contain)
+  }
+
+  property int seenReveal: 0
+
+  function trackIndex(id) {
+    if (id < 0 || !Array.isArray(tracks)) return -1
+    for (var i = 0; i < tracks.length; ++i) {
+      if (Number(tracks[i].id) === id) return i
+    }
+    return -1
+  }
+
+  function isShown() {
+    var item = root
+    while (item) {
+      if (!item.visible) return false
+      item = item.parent
+    }
+    return true
+  }
+
+  // Scroll the playing track into the middle once this list is the open page.
+  function maybeRevealPlaying() {
+    if (!service || revealPage === "" || revealPage !== service.playingRevealPage) return
+    var token = service.playingReveal
+    if (token === 0 || token === seenReveal) return
+    if (!isShown()) return
+    var index = trackIndex(currentId)
+    if (index < 0) return
+    seenReveal = token
+    keyboardIndex = index
+    var view = tiled ? grid : rows
+    view.positionViewAtIndex(index, tiled ? GridView.Center : ListView.Center)
+  }
+
+  function scheduleReveal() {
+    Qt.callLater(function() {
+      Qt.callLater(function() { root.maybeRevealPlaying() })
+    })
+  }
+
+  Connections {
+    target: root.service
+    function onPlayingRevealChanged() { root.scheduleReveal() }
+  }
+  onTracksChanged: scheduleReveal()
+
+  function moveKeyboard(dx, dy) {
+    var result = ListKeys.move(keyboardIndex, keyboardCount,
+      ListKeys.columnsOf(tiled, columnCount), dx, dy)
+    if (result.edge === "") {
+      keyboardIndex = result.index
+      revealKeyboard()
+    }
+    return result.edge
+  }
+
+  function pageKeyboard(direction) {
+    var rowsHigh = Math.max(1, Math.floor(height / Math.max(1, keyboardStride)))
+    keyboardIndex = ListKeys.page(keyboardIndex, keyboardCount,
+      ListKeys.columnsOf(tiled, columnCount), rowsHigh, direction)
+    revealKeyboard()
+  }
+
+  function jumpKeyboardStart() {
+    keyboardIndex = keyboardCount > 0 ? 0 : -1
+    revealKeyboard()
+  }
+
+  function jumpKeyboardEnd() {
+    keyboardIndex = keyboardCount > 0 ? keyboardCount - 1 : -1
+    revealKeyboard()
+  }
+
+  function activateKeyboard() {
+    if (keyboardIndex < 0 || keyboardIndex >= keyboardCount) return
+    playTrack(tracks[keyboardIndex])
+  }
+
+  onKeyboardCountChanged: publishKeyboard()
+  onVisibleChanged: {
+    scheduleReveal()
+    publishKeyboard()
+  }
+  onTiledChanged: {
+    revealKeyboard()
+    publishKeyboard()
   }
 
   ListView {
@@ -56,6 +163,7 @@ Item {
     required property var modelData
     required property int index
     readonly property bool isCurrent: Number(modelData.id) === root.currentId
+    readonly property bool keyboardHere: root.keyboardFocused && index === root.keyboardIndex
     readonly property bool hasArtist: !!(modelData.artist && modelData.artist_id !== undefined
       && modelData.artist_id !== null)
     readonly property bool hasAlbum: !!(modelData.album && modelData.album_id !== undefined
@@ -64,9 +172,13 @@ Item {
     width: ListView.view.width
     height: 44
     radius: 6
-    color: rowArea.containsMouse
-      ? Qt.rgba(Color.foreground.r, Color.foreground.g, Color.foreground.b, 0.08)
-      : "transparent"
+    border.width: row.keyboardHere ? 1 : 0
+    border.color: Color.accent
+    color: row.keyboardHere
+      ? Qt.rgba(Color.accent.r, Color.accent.g, Color.accent.b, 0.2)
+      : (rowArea.containsMouse
+        ? Qt.rgba(Color.foreground.r, Color.foreground.g, Color.foreground.b, 0.08)
+        : "transparent")
 
     // Whole-row click plays the title. Artist/album only steal events when
     // the pointer is over their actual text (not the empty remainder of the row).
@@ -214,6 +326,7 @@ Item {
       required property var modelData
       required property int index
       readonly property bool isCurrent: Number(modelData.id) === root.currentId
+      readonly property bool keyboardHere: root.keyboardFocused && index === root.keyboardIndex
 
       width: GridView.view.cellWidth
       height: GridView.view.cellHeight
@@ -246,10 +359,12 @@ Item {
         anchors.fill: parent
         anchors.margins: 6
         radius: 8
-        color: tileArea.containsMouse
-          ? Qt.rgba(Color.foreground.r, Color.foreground.g, Color.foreground.b, 0.08)
-          : "transparent"
-        border.width: tile.isCurrent ? 1 : 0
+        color: tile.keyboardHere
+          ? Qt.rgba(Color.accent.r, Color.accent.g, Color.accent.b, 0.2)
+          : (tileArea.containsMouse
+            ? Qt.rgba(Color.foreground.r, Color.foreground.g, Color.foreground.b, 0.08)
+            : "transparent")
+        border.width: tile.keyboardHere || tile.isCurrent ? 1 : 0
         border.color: Color.accent
 
         Rectangle {
