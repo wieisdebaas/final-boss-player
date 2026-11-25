@@ -26,6 +26,47 @@ fn track(folder_id: i64, path: &str, title: &str) -> TrackInput {
 }
 
 #[test]
+fn lists_recently_added_tracks_newest_first() {
+    let temp = tempdir().unwrap();
+    let path = temp.path().join("library.sqlite");
+    let db = Db::open(&path).unwrap();
+    let folder_id = db.upsert_folder("/music", None).unwrap();
+    db.upsert_track(&track(folder_id, "/music/old.flac", "Old"))
+        .unwrap();
+    db.upsert_track(&track(folder_id, "/music/new.flac", "New"))
+        .unwrap();
+    db.upsert_track(&track(folder_id, "/music/also-new.flac", "Also New"))
+        .unwrap();
+    drop(db);
+
+    let connection = Connection::open(&path).unwrap();
+    connection
+        .execute("UPDATE tracks SET added_at = 10 WHERE title = 'Old'", [])
+        .unwrap();
+    connection
+        .execute("UPDATE tracks SET added_at = 30 WHERE title = 'New'", [])
+        .unwrap();
+    connection
+        .execute(
+            "UPDATE tracks SET added_at = 30 WHERE title = 'Also New'",
+            [],
+        )
+        .unwrap();
+    drop(connection);
+
+    let db = Db::open(&path).unwrap();
+    let recent = db.list_recent_tracks(2, 0).unwrap();
+
+    assert_eq!(
+        recent
+            .iter()
+            .map(|track| track.title.as_str())
+            .collect::<Vec<_>>(),
+        vec!["Also New", "New"]
+    );
+}
+
+#[test]
 fn inserts_a_track_and_finds_it_by_title() {
     let temp = tempdir().unwrap();
     let db = Db::open(temp.path().join("library.sqlite")).unwrap();

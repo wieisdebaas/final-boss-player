@@ -77,7 +77,7 @@ Sidebar:
 
 | Page | What it does |
 | --- | --- |
-| **Home** | Library overview |
+| **Home** | Tracks added most recently |
 | **Search** | Local search (no internet) |
 | **Library** | All tracks |
 | **Artists** | Browse by artist |
@@ -104,7 +104,7 @@ Playback works anywhere in the window:
 | `Ctrl+F` | Jump to Search |
 | `Esc` | Close the panel |
 
-One highlight sits on the sidebar or on the page list. `Tab` and `Shift+Tab` switch between them. On Home, `Down` walks Albums and then continues into Tracks. With the highlight on Settings, those list keys scroll the page. In Search or the folder path, the arrow keys edit the text. `Tab` leaves the field for the list, and `Shift+Tab` leaves it for the sidebar. The highlight stays where the last key put it.
+One highlight sits on the sidebar or on the page list. `Tab` and `Shift+Tab` switch between them. With the highlight on Settings, those list keys scroll the page. In Search or the folder path, the arrow keys edit the text. `Tab` leaves the field for the list, and `Shift+Tab` leaves it for the sidebar. The highlight stays where the last key put it.
 
 | Key | Action |
 | --- | --- |

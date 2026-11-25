@@ -442,6 +442,23 @@ impl Db {
         tracks
     }
 
+    /// Newest additions first. Tracks that share a timestamp stay in insert
+    /// order, latest row first.
+    pub fn list_recent_tracks(&self, limit: u32, offset: u32) -> Result<Vec<Track>> {
+        let mut statement = self.connection.prepare(
+            "SELECT id, folder_id, path, size, mtime, title, artist, album_artist,
+                    album, track_no, disc_no, year, genre, duration_ms, has_art, added_at,
+                    album_id, artist_id
+             FROM tracks
+             ORDER BY added_at DESC, id DESC
+             LIMIT ?1 OFFSET ?2",
+        )?;
+        let tracks = statement
+            .query_map(params![limit, offset], map_track)?
+            .collect();
+        tracks
+    }
+
     pub fn list_tracks(&self, limit: u32, offset: u32) -> Result<Vec<Track>> {
         let mut statement = self.connection.prepare(
             "SELECT id, folder_id, path, size, mtime, title, artist, album_artist,

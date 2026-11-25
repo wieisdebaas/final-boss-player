@@ -14,6 +14,8 @@ Item {
   property var tracks: []
   property string emptyText: "No tracks"
   property bool showNumbers: true
+  // Small album cover on each row. Tiles always show art.
+  property bool covers: false
   // Queue built when a row is played: "album", "artist", or "library".
   property string queueScope: "album"
   // Which footer jump this list answers: "albums", "artists", or "library".
@@ -39,7 +41,8 @@ Item {
   property int keyboardIndex: -1
   property bool keyboardFocused: false
   readonly property int keyboardCount: Array.isArray(tracks) ? tracks.length : 0
-  readonly property int keyboardStride: tiled ? cellHeight : 44
+  readonly property int rowHeight: covers ? 52 : 44
+  readonly property int keyboardStride: tiled ? cellHeight : rowHeight
 
   function publishKeyboard() {
     if (keyboardIndex >= keyboardCount)
@@ -169,8 +172,31 @@ Item {
     readonly property bool hasAlbum: !!(modelData.album && modelData.album_id !== undefined
       && modelData.album_id !== null)
 
+    property string artPath: ""
+    property int artAlbumId: -1
+
+    function refreshArt() {
+      if (!root.covers || !root.service || !root.service.connected || row.modelData.has_art !== true) {
+        artPath = ""
+        artAlbumId = -1
+        return
+      }
+      var albumId = Number(row.modelData.album_id)
+      if (!(albumId >= 0)) return
+      if (albumId === artAlbumId && artPath !== "") return
+      artAlbumId = albumId
+      artPath = ""
+      root.service.request("get_art", { album_id: albumId }, function(ok, result) {
+        if (albumId !== row.artAlbumId) return
+        row.artPath = ok && result && result.path ? String(result.path) : ""
+      })
+    }
+
+    onModelDataChanged: refreshArt()
+    Component.onCompleted: refreshArt()
+
     width: ListView.view.width
-    height: 44
+    height: root.rowHeight
     radius: 6
     border.width: row.keyboardHere ? 1 : 0
     border.color: Color.accent
@@ -216,9 +242,40 @@ Item {
               : ""
       }
 
+      Rectangle {
+        id: cover
+        visible: root.covers
+        anchors.verticalCenter: parent.verticalCenter
+        width: 36
+        height: 36
+        radius: 4
+        clip: true
+        color: Qt.rgba(Color.accent.r, Color.accent.g, Color.accent.b, 0.18)
+
+        Image {
+          anchors.fill: parent
+          visible: row.artPath !== ""
+          source: row.artPath !== "" ? "file://" + row.artPath : ""
+          fillMode: Image.PreserveAspectCrop
+          sourceSize.width: 72
+          sourceSize.height: 72
+          asynchronous: true
+          cache: true
+        }
+
+        Text {
+          anchors.centerIn: parent
+          visible: row.artPath === ""
+          color: Color.accent
+          font.pixelSize: 15
+          font.bold: true
+          text: String(row.modelData.album || row.modelData.title || "?").charAt(0).toUpperCase()
+        }
+      }
+
       Column {
         anchors.verticalCenter: parent.verticalCenter
-        width: parent.width - 40 - 60 - 24
+        width: parent.width - 40 - 60 - 24 - (cover.visible ? 48 : 0)
         spacing: 1
 
         Text {

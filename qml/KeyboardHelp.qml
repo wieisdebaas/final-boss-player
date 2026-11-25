@@ -30,7 +30,7 @@ Column {
       rows: [
         { keys: "Tab", action: "Switch the highlight between the sidebar and the list" },
         { keys: "Shift+Tab", action: "Switch the highlight the other way" },
-        { keys: "Up / Down", action: "Previous or next row. On Home, Down continues from Albums into Tracks" },
+        { keys: "Up / Down", action: "Previous or next row" },
         { keys: "Left / Right", action: "Previous or next cover, while tile view is on" },
         { keys: "Page Up", action: "Jump up one screen" },
         { keys: "Page Down", action: "Jump down one screen" },
@@ -55,7 +55,7 @@ Column {
     color: Color.muted
     font.pixelSize: 12
     lineHeight: 1.35
-    text: "Playback keys work anywhere in the window. Tab and Shift+Tab move one highlight between the sidebar and the list on the page. Up and Down move one row. In the cover grid, Left and Right move across that row. Page Up and Page Down jump one screen. Ctrl+Home and Ctrl+End jump to the first and last item. Enter opens the highlighted menu page, plays the highlighted track, or opens the highlighted album or artist. On Home, Down walks Albums and then continues into Tracks. With the highlight on this page, Up, Down, Page Up, Page Down, Ctrl+Home, and Ctrl+End scroll this text. While the cursor is in Search or the folder path, the arrow keys edit the text. Tab leaves the field for the list, and Shift+Tab leaves it for the sidebar. The highlight stays where the last key put it."
+    text: "Playback keys work anywhere in the window. Tab and Shift+Tab move one highlight between the sidebar and the list on the page. Up and Down move one row. In the cover grid, Left and Right move across that row. Page Up and Page Down jump one screen. Ctrl+Home and Ctrl+End jump to the first and last item. Enter opens the highlighted menu page, plays the highlighted track, or opens the highlighted album or artist. With the highlight on this page, Up, Down, Page Up, Page Down, Ctrl+Home, and Ctrl+End scroll this text. While the cursor is in Search or the folder path, the arrow keys edit the text. Tab leaves the field for the list, and Shift+Tab leaves it for the sidebar. The highlight stays where the last key put it."
   }
 
   Repeater {

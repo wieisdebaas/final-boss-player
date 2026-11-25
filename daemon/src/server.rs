@@ -401,9 +401,7 @@ async fn query(
             "search" => Ok(serde_json::to_value(db.search(&q, limit, offset)?)?),
             "home" => Ok(json!({
                 "stats": db.stats()?,
-                "tracks": db.list_tracks(limit, offset)?,
-                "albums": db.list_albums(limit, offset)?,
-                "artists": db.list_artists(limit, offset)?,
+                "tracks": db.list_recent_tracks(limit, offset)?,
             })),
             "album" => {
                 let album_id = parse_query_id(&q, "album")?;
