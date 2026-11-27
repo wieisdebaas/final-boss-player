@@ -224,6 +224,7 @@ impl ServerContext {
 }
 
 async fn serve_context(listener: UnixListener, context: ServerContext) -> Result<()> {
+    watch_metadata(context.clone());
     loop {
         let (stream, _) = listener.accept().await.context("socket accept failed")?;
         let client_context = context.clone();
@@ -326,6 +327,9 @@ async fn dispatch(line: &str, context: &ServerContext) -> ServerMessage {
                 | "set_shuffle"
                 | "set_repeat"
                 | "set_normalize"
+                | "set_update_metadata"
+                | "get_genre_art"
+                | "play_genre"
         )
     ) {
         return error_response(id, "unknown_command", "command is not supported");
@@ -356,9 +360,9 @@ async fn dispatch(line: &str, context: &ServerContext) -> ServerMessage {
             offset,
         } => query(request.id, context, kind, q, limit, offset).await,
         Command::GetArt { album_id } => get_art(request.id, context, album_id).await,
-        Command::GetArtistArt { artist_id } => {
-            get_artist_art(request.id, context, artist_id).await
-        }
+        Command::GetArtistArt { artist_id } => get_artist_art(request.id, context, artist_id).await,
+        Command::GetGenreArt { name } => get_genre_art(request.id, context, name).await,
+        Command::PlayGenre { name } => play_genre(request.id, context, name).await,
         Command::Play { track_id, scope } => play_track(request.id, context, track_id, scope).await,
         Command::PlayAlbum { album_id } => play_album(request.id, context, album_id).await,
         Command::PlayArtist { artist_id } => play_artist(request.id, context, artist_id).await,
@@ -376,6 +380,9 @@ async fn dispatch(line: &str, context: &ServerContext) -> ServerMessage {
         Command::SetRepeat { mode } => playback(request.id, context, Cmd::SetRepeat(mode)).await,
         Command::SetNormalize { enabled } => {
             playback(request.id, context, Cmd::SetNormalize(enabled)).await
+        }
+        Command::SetUpdateMetadata { enabled } => {
+            playback(request.id, context, Cmd::SetUpdateMetadata(enabled)).await
         }
     }
 }
@@ -414,6 +421,8 @@ async fn query(
                     db.artist_tracks(artist_id, limit, offset)?,
                 )?)
             }
+            "genres" => Ok(serde_json::to_value(db.list_genres(limit, offset)?)?),
+            "genre" => Ok(serde_json::to_value(db.genre_tracks(&q, limit, offset)?)?),
             _ => bail!("unsupported query kind: {kind}"),
         }
     })
@@ -445,14 +454,20 @@ async fn get_artist_art(id: u64, context: &ServerContext, artist_id: i64) -> Ser
     };
     let result = tokio::task::spawn_blocking(move || -> Result<Option<PathBuf>> {
         let db = crate::db::Db::open(db_path)?;
-        let Some(source) = db.artist_art_source(artist_id)? else {
-            return Ok(None);
-        };
-        Ok(Some(crate::art::get_or_create_artist(
-            &art_dir,
-            artist_id,
-            Path::new(&source),
-        )?))
+        if let Some(source) = db.artist_art_source(artist_id)? {
+            return Ok(Some(crate::art::get_or_create_artist(
+                &art_dir,
+                artist_id,
+                Path::new(&source),
+            )?));
+        }
+        if let Some(album_id) = db.artist_cached_album(artist_id)? {
+            let cached = crate::art::cache_path(&art_dir, album_id);
+            if cached.is_file() {
+                return Ok(Some(cached));
+            }
+        }
+        Ok(None)
     })
     .await;
 
@@ -470,6 +485,10 @@ async fn get_art(id: u64, context: &ServerContext, album_id: i64) -> ServerMessa
     };
     let result = tokio::task::spawn_blocking(move || -> Result<Option<PathBuf>> {
         let db = crate::db::Db::open(db_path)?;
+        let cached = crate::art::cache_path(&art_dir, album_id);
+        if cached.is_file() {
+            return Ok(Some(cached));
+        }
         let Some(source) = db.album_art_source(album_id)? else {
             return Ok(None);
         };
@@ -528,6 +547,46 @@ async fn play_artist(id: u64, context: &ServerContext, artist_id: i64) -> Server
     .await
 }
 
+async fn play_genre(id: u64, context: &ServerContext, name: String) -> ServerMessage {
+    play_queue(id, context, "genre".into(), move |db| {
+        let tracks = db.genre_tracks(&name, u32::MAX, 0)?;
+        Ok((!tracks.is_empty()).then_some((tracks, 0)))
+    })
+    .await
+}
+
+async fn get_genre_art(id: u64, context: &ServerContext, name: String) -> ServerMessage {
+    let (Some(db_path), Some(art_dir)) = (context.db_path.clone(), context.art_dir.clone()) else {
+        return error_response(id, "unavailable", "artwork cache is not configured");
+    };
+    let result = tokio::task::spawn_blocking(move || -> Result<Option<PathBuf>> {
+        let db = crate::db::Db::open(db_path)?;
+        let Some(lead) = db.genre_cover_lead(&name)? else {
+            return Ok(None);
+        };
+        let cached = crate::art::cache_path(&art_dir, lead.album_id);
+        if cached.is_file() {
+            return Ok(Some(cached));
+        }
+        let Some(source) = lead.embedded_path else {
+            return Ok(None);
+        };
+        Ok(Some(crate::art::get_or_create(
+            &art_dir,
+            lead.album_id,
+            Path::new(&source),
+        )?))
+    })
+    .await;
+
+    match result {
+        Ok(Ok(Some(path))) => ok_response(id, Some(json!({ "path": path }))),
+        Ok(Ok(None)) => error_response(id, "not_found", "genre has no artwork"),
+        Ok(Err(error)) => error_response(id, "art_error", error.to_string()),
+        Err(error) => error_response(id, "internal_error", error.to_string()),
+    }
+}
+
 /// Resolves a queue from the library, then hands it to the player.
 async fn play_queue<F>(id: u64, context: &ServerContext, scope: String, resolve: F) -> ServerMessage
 where
@@ -546,7 +605,7 @@ where
     let (tracks, start) = match resolved {
         Ok(Ok(Some(queue))) => queue,
         Ok(Ok(None)) => {
-            return error_response(id, "not_found", "no such track, album, or artist")
+            return error_response(id, "not_found", "no such track, album, artist, or genre")
         }
         Ok(Err(error)) => return error_response(id, "database_error", error.to_string()),
         Err(error) => return error_response(id, "internal_error", error.to_string()),
@@ -809,6 +868,102 @@ async fn run_scan_task(
         state.set_scan_error(message).await;
     }
     cancelled
+}
+
+/// Starts a metadata lookup when the setting is on and no scan is running,
+/// and stops one when the setting is turned off or a scan begins.
+fn watch_metadata(context: ServerContext) {
+    if context.db_path.is_none() || context.art_dir.is_none() {
+        return;
+    }
+    let state = context.state.clone();
+    tokio::spawn(async move {
+        let mut changes = state.subscribe();
+        let mut current = state.snapshot().await;
+        if metadata_should_start(None, &current) {
+            spawn_metadata(&context);
+        }
+        loop {
+            match changes.recv().await {
+                Ok(next) => {
+                    if metadata_should_cancel(&current, &next) {
+                        state.cancel_metadata();
+                        state.set_metadata_progress(None).await;
+                    }
+                    if metadata_should_start(Some(&current), &next) {
+                        spawn_metadata(&context);
+                    }
+                    current = next;
+                }
+                Err(broadcast::error::RecvError::Lagged(_)) => {
+                    current = state.snapshot().await;
+                }
+                Err(broadcast::error::RecvError::Closed) => break,
+            }
+        }
+    });
+}
+
+fn metadata_should_start(
+    previous: Option<&crate::protocol::PlayerState>,
+    next: &crate::protocol::PlayerState,
+) -> bool {
+    if !next.update_metadata || is_scanning(next) {
+        return false;
+    }
+    match previous {
+        None => true,
+        Some(previous) => !previous.update_metadata || is_scanning(previous),
+    }
+}
+
+fn metadata_should_cancel(
+    previous: &crate::protocol::PlayerState,
+    next: &crate::protocol::PlayerState,
+) -> bool {
+    let turned_off = previous.update_metadata && !next.update_metadata;
+    let scan_started = !is_scanning(previous) && is_scanning(next);
+    turned_off || scan_started
+}
+
+fn is_scanning(state: &crate::protocol::PlayerState) -> bool {
+    state
+        .scan
+        .as_ref()
+        .and_then(|scan| scan.get("scanning"))
+        .and_then(Value::as_bool)
+        .unwrap_or(false)
+}
+
+fn spawn_metadata(context: &ServerContext) {
+    let (Some(db_path), Some(art_dir)) = (context.db_path.clone(), context.art_dir.clone()) else {
+        return;
+    };
+    let state = context.state.clone();
+    let generation = state.begin_metadata();
+    let (tx, mut rx) = tokio::sync::mpsc::channel::<crate::lookup::MetadataProgress>(8);
+    let progress_state = state.clone();
+    tokio::spawn(async move {
+        while let Some(progress) = rx.recv().await {
+            if !progress_state.metadata_is_current(generation) {
+                continue;
+            }
+            progress_state
+                .set_metadata_progress(Some(json!({
+                    "looking": progress.looking,
+                    "looked": progress.looked,
+                    "total": progress.total,
+                })))
+                .await;
+        }
+    });
+    tokio::task::spawn_blocking(move || {
+        crate::lookup::enrich_library(&db_path, &art_dir, &state, generation, |progress| {
+            if state.metadata_is_current(generation) {
+                let _ = tx.blocking_send(progress);
+            }
+        });
+    });
 }
 
 fn ok_response(id: u64, result: Option<Value>) -> ServerMessage {

@@ -32,6 +32,7 @@ Item {
     { page: "library", label: "Library" },
     { page: "artists", label: "Artists" },
     { page: "albums", label: "Albums" },
+    { page: "genres", label: "Genres" },
     { page: "settings", label: "Settings" }
   ]
 
@@ -83,6 +84,7 @@ Item {
     else if (currentPage === "library") page = libraryPage
     else if (currentPage === "artists") page = artistPage
     else if (currentPage === "albums") page = albumPage
+    else if (currentPage === "genres") page = genrePage
     if (!page || !page.keyboardLists) return []
     var raw = page.keyboardLists
     var out = []
@@ -509,6 +511,12 @@ Item {
             id: albumPage
             anchors.fill: parent
             visible: root.currentPage === "albums"
+            service: root.service
+          }
+          GenrePage {
+            id: genrePage
+            anchors.fill: parent
+            visible: root.currentPage === "genres"
             service: root.service
           }
           SettingsPage {

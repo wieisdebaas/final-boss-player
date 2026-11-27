@@ -1,4 +1,4 @@
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
 use tokio::sync::{broadcast, RwLock};
@@ -17,6 +17,8 @@ pub struct AppState {
     /// Held for the whole lifetime of a scan task and by folder removal, so
     /// `remove_folder` can wait for a cancelled scan to stop writing.
     scan_gate: Arc<tokio::sync::Mutex<()>>,
+    /// Identity of the metadata lookup that should still be running.
+    metadata_generation: Arc<AtomicU64>,
 }
 
 impl AppState {
@@ -28,7 +30,21 @@ impl AppState {
             scan_cancel: Arc::new(Mutex::new(None)),
             full_scan_pending: Arc::new(AtomicBool::new(false)),
             scan_gate: Arc::new(tokio::sync::Mutex::new(())),
+            metadata_generation: Arc::new(AtomicU64::new(0)),
         }
+    }
+
+    /// Starts a lookup generation and retires any lookup already running.
+    pub fn begin_metadata(&self) -> u64 {
+        self.metadata_generation.fetch_add(1, Ordering::SeqCst) + 1
+    }
+
+    pub fn cancel_metadata(&self) {
+        self.metadata_generation.fetch_add(1, Ordering::SeqCst);
+    }
+
+    pub fn metadata_is_current(&self, generation: u64) -> bool {
+        self.metadata_generation.load(Ordering::SeqCst) == generation
     }
 
     pub async fn acquire_scan_gate(&self) -> tokio::sync::OwnedMutexGuard<()> {
@@ -154,6 +170,7 @@ pub struct PlaybackUpdate {
     pub error_message: Option<String>,
     pub scope: String,
     pub normalize: bool,
+    pub update_metadata: bool,
 }
 
 impl PlaybackUpdate {
@@ -177,6 +194,7 @@ impl AppState {
         snapshot.repeat = update.repeat;
         snapshot.scope = update.scope;
         snapshot.normalize = update.normalize;
+        snapshot.update_metadata = update.update_metadata;
         // Playback must not clear a scan failure, but owns its own errors.
         if update.error_code.is_some() || snapshot.error_code.as_deref() != Some("scan_failed") {
             snapshot.error_code = update.error_code;
@@ -210,5 +228,16 @@ pub fn initial_player_state() -> PlayerState {
         generation: 0,
         scope: "album".into(),
         normalize: false,
+        update_metadata: false,
+        metadata: None,
+    }
+}
+
+impl AppState {
+    pub async fn set_metadata_progress(&self, progress: Option<serde_json::Value>) {
+        let mut snapshot = self.current.write().await;
+        snapshot.metadata = progress;
+        snapshot.generation += 1;
+        let _ = self.changes.send(snapshot.clone());
     }
 }

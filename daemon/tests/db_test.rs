@@ -96,7 +96,11 @@ fn comma_separated_terms_must_all_match() {
     shady.album = Some("The Slim Shady LP".into());
     db.upsert_track(&shady).unwrap();
 
-    let mut marshall = track(folder_id, "/music/real-slim-shady.flac", "The Real Slim Shady");
+    let mut marshall = track(
+        folder_id,
+        "/music/real-slim-shady.flac",
+        "The Real Slim Shady",
+    );
     marshall.artist = Some("Eminem".into());
     marshall.album_artist = Some("Eminem".into());
     marshall.album = Some("The Marshall Mathers LP".into());
@@ -126,7 +130,7 @@ fn creates_version_one_schema_and_lists_upserted_folders() {
     let second_id = db.upsert_folder("/music", Some(200)).unwrap();
     let folders = db.list_folders().unwrap();
 
-    assert_eq!(db.user_version().unwrap(), 1);
+    assert_eq!(db.user_version().unwrap(), 2);
     assert_eq!(first_id, second_id);
     assert_eq!(folders.len(), 1);
     assert_eq!(folders[0].path, "/music");
@@ -228,7 +232,7 @@ fn rejects_newer_schema_without_downgrading_it() {
     let path = temp.path().join("library.sqlite");
     let connection = Connection::open(&path).unwrap();
     connection
-        .execute_batch("PRAGMA user_version = 2;")
+        .execute_batch("PRAGMA user_version = 3;")
         .unwrap();
     drop(connection);
 
@@ -245,7 +249,7 @@ fn rejects_newer_schema_without_downgrading_it() {
             |row| row.get(0),
         )
         .unwrap();
-    assert_eq!(version, 2);
+    assert_eq!(version, 3);
     assert_eq!(table_count, 0);
 }
 
@@ -366,7 +370,7 @@ fn concurrent_first_opens_all_migrate_safely() {
         .collect();
 
     for handle in handles {
-        assert_eq!(handle.join().unwrap().unwrap(), 1);
+        assert_eq!(handle.join().unwrap().unwrap(), 2);
     }
 }
 
@@ -474,4 +478,120 @@ fn play_queue_follows_album_artist_or_the_whole_library() {
         )
     );
     assert!(db.queue_for_scope(9999, "library").unwrap().is_none());
+}
+
+#[test]
+fn genres_group_tracks_and_a_lookup_is_remembered() {
+    let temp = tempdir().unwrap();
+    let db = Db::open(temp.path().join("library.sqlite")).unwrap();
+    let folder_id = db.upsert_folder("/music", None).unwrap();
+
+    let mut jazz = scoped(folder_id, "/music/j1.flac", "Blue", "Ada", "Cool", 1);
+    jazz.genre = Some("Jazz".into());
+    jazz.has_art = true;
+    let jazz_id = db.upsert_track(&jazz).unwrap();
+
+    let mut jazz_two = scoped(folder_id, "/music/j2.flac", "Bluer", "Ada", "Cool", 2);
+    jazz_two.genre = Some("jazz".into());
+    jazz_two.has_art = false;
+    db.upsert_track(&jazz_two).unwrap();
+
+    let mut bare = scoped(folder_id, "/music/bare.flac", "Bare", "Bea", "Empty", 1);
+    bare.genre = None;
+    bare.has_art = false;
+    let bare_id = db.upsert_track(&bare).unwrap();
+
+    let genres = db.list_genres(20, 0).unwrap();
+    assert_eq!(genres.len(), 1);
+    assert_eq!(genres[0].name.to_lowercase(), "jazz");
+    assert_eq!(genres[0].track_count, 2);
+    assert!(genres[0].has_art);
+
+    let tracks = db.genre_tracks("JAZZ", 20, 0).unwrap();
+    assert_eq!(tracks.len(), 2);
+    assert_eq!(
+        titles(db.queue_for_scope(jazz_id, "genre").unwrap()).0,
+        vec!["Blue".to_string(), "Bluer".to_string()]
+    );
+
+    let gaps = db.albums_missing_metadata().unwrap();
+    assert_eq!(gaps.len(), 1);
+    assert_eq!(gaps[0].name, "Empty");
+    assert!(gaps[0].needs_genre);
+    assert!(gaps[0].needs_art);
+
+    let album_id = db
+        .list_albums(20, 0)
+        .unwrap()
+        .into_iter()
+        .find(|album| album.name == "Empty")
+        .unwrap()
+        .id;
+    assert_eq!(db.fill_empty_genre(album_id, "Rock").unwrap(), 1);
+    assert_eq!(db.genre_tracks("Rock", 20, 0).unwrap()[0].id, bare_id);
+    // An existing genre is left alone.
+    assert_eq!(db.fill_empty_genre(album_id, "Metal").unwrap(), 0);
+
+    db.mark_album_cover(album_id).unwrap();
+    let empty = db
+        .list_albums(20, 0)
+        .unwrap()
+        .into_iter()
+        .find(|album| album.name == "Empty")
+        .unwrap();
+    assert!(empty.has_art);
+
+    let key = db::album_key("Bea", "Empty");
+    db.remember_lookup(&key, true, Some("mbid"), Some("Rock"))
+        .unwrap();
+    assert!(db.albums_missing_metadata().unwrap().is_empty());
+
+    // A rescan that clears the tag is filled back from the remembered lookup.
+    let mut cleared = bare.clone();
+    cleared.genre = None;
+    db.upsert_track(&cleared).unwrap();
+    assert_eq!(db.refill_cached_genres().unwrap(), 1);
+    assert_eq!(
+        db.genre_tracks("Rock", 20, 0).unwrap()[0].genre.as_deref(),
+        Some("Rock")
+    );
+}
+
+#[test]
+fn migrates_a_version_one_database() {
+    let temp = tempdir().unwrap();
+    let path = temp.path().join("library.sqlite");
+    let connection = Connection::open(&path).unwrap();
+    connection
+        .execute_batch(
+            "CREATE TABLE albums (
+                id INTEGER PRIMARY KEY,
+                name TEXT NOT NULL,
+                album_artist TEXT NOT NULL DEFAULT '',
+                year INTEGER
+             );
+             PRAGMA user_version = 1;",
+        )
+        .unwrap();
+    drop(connection);
+
+    let db = Db::open(&path).unwrap();
+    assert_eq!(db.user_version().unwrap(), 2);
+    let connection = Connection::open(&path).unwrap();
+    let has_cover: i64 = connection
+        .query_row(
+            "SELECT COUNT(*) FROM pragma_table_info('albums') WHERE name = 'has_cover'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    let lookups: i64 = connection
+        .query_row(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'metadata_lookups'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(has_cover, 1);
+    assert_eq!(lookups, 1);
 }

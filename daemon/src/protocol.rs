@@ -66,11 +66,20 @@ pub enum Command {
     SetNormalize {
         enabled: bool,
     },
+    SetUpdateMetadata {
+        enabled: bool,
+    },
     GetArt {
         album_id: i64,
     },
     GetArtistArt {
         artist_id: i64,
+    },
+    GetGenreArt {
+        name: String,
+    },
+    PlayGenre {
+        name: String,
     },
 }
 
@@ -117,6 +126,12 @@ pub struct PlayerState {
     /// When set, each track is gained so songs play at a similar loudness.
     #[serde(default)]
     pub normalize: bool,
+    /// When set, a scan also fills missing genre and cover art from the network.
+    #[serde(default)]
+    pub update_metadata: bool,
+    /// Progress of that lookup: `{looking, looked, total}`.
+    #[serde(default)]
+    pub metadata: Option<Value>,
 }
 
 fn default_scope() -> String {

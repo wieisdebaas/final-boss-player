@@ -1,5 +1,7 @@
 pub mod art;
 pub mod db;
+pub mod fingerprint;
+pub mod lookup;
 pub mod loudness;
 pub mod meta;
 pub mod mpris;

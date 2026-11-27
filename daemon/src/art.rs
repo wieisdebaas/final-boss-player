@@ -59,6 +59,21 @@ pub fn get_or_create_artist(art_dir: &Path, artist_id: i64, source: &Path) -> Re
     write_thumbnail(&artist_cache_path(art_dir, artist_id), art_dir, source)
 }
 
+/// Decodes downloaded cover bytes into the same album thumbnail cache.
+pub fn store_cover(art_dir: &Path, album_id: i64, bytes: &[u8]) -> Result<PathBuf> {
+    let destination = cache_path(art_dir, album_id);
+    if destination.is_file() {
+        return Ok(destination);
+    }
+    let image = ImageReader::new(std::io::Cursor::new(bytes))
+        .with_guessed_format()
+        .context("could not determine downloaded artwork format")?
+        .decode()
+        .context("could not decode downloaded artwork")?
+        .thumbnail(MAX_DIMENSION, MAX_DIMENSION);
+    write_jpeg(&destination, art_dir, &image)
+}
+
 fn write_thumbnail(destination: &Path, art_dir: &Path, source: &Path) -> Result<PathBuf> {
     if destination.is_file() {
         return Ok(destination.to_path_buf());
@@ -71,7 +86,10 @@ fn write_thumbnail(destination: &Path, art_dir: &Path, source: &Path) -> Result<
         .decode()
         .context("could not decode embedded artwork")?
         .thumbnail(MAX_DIMENSION, MAX_DIMENSION);
+    write_jpeg(destination, art_dir, &image)
+}
 
+fn write_jpeg(destination: &Path, art_dir: &Path, image: &image::DynamicImage) -> Result<PathBuf> {
     fs::create_dir_all(art_dir)
         .with_context(|| format!("could not create {}", art_dir.display()))?;
     let temporary = destination.with_extension(format!(
@@ -82,7 +100,7 @@ fn write_thumbnail(destination: &Path, art_dir: &Path, source: &Path) -> Result<
     let file = fs::File::create(&temporary)
         .with_context(|| format!("could not create {}", temporary.display()))?;
     JpegEncoder::new_with_quality(file, 85)
-        .encode_image(&image)
+        .encode_image(image)
         .context("could not encode artwork thumbnail")?;
     if let Err(error) = fs::rename(&temporary, &destination) {
         let _ = fs::remove_file(&temporary);

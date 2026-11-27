@@ -70,6 +70,40 @@ fn get_artist_art_json_line_round_trips() {
 }
 
 #[test]
+fn set_update_metadata_json_line_round_trips() {
+    let line = r#"{"v":1,"id":13,"cmd":"set_update_metadata","enabled":true}"#;
+
+    let message: ClientMessage = serde_json::from_str(line).unwrap();
+    assert_eq!(
+        message,
+        ClientMessage {
+            v: 1,
+            id: 13,
+            cmd: Command::SetUpdateMetadata { enabled: true },
+        }
+    );
+    assert_eq!(serde_json::to_string(&message).unwrap(), line);
+}
+
+#[test]
+fn play_genre_json_line_round_trips() {
+    let line = r#"{"v":1,"id":14,"cmd":"play_genre","name":"Jazz"}"#;
+
+    let message: ClientMessage = serde_json::from_str(line).unwrap();
+    assert_eq!(
+        message,
+        ClientMessage {
+            v: 1,
+            id: 14,
+            cmd: Command::PlayGenre {
+                name: "Jazz".into()
+            },
+        }
+    );
+    assert_eq!(serde_json::to_string(&message).unwrap(), line);
+}
+
+#[test]
 fn unsupported_protocol_version_has_stable_error_code() {
     let error = parse_client_message(r#"{"v":2,"id":9,"cmd":"ping"}"#).unwrap_err();
 

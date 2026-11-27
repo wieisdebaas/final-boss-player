@@ -82,9 +82,10 @@ Sidebar:
 | **Library** | All tracks |
 | **Artists** | Browse by artist |
 | **Albums** | Browse by album |
-| **Settings** | Folders, rescan |
+| **Genres** | Browse by genre, as a list or as tiles |
+| **Settings** | Folders, rescan, metadata lookup |
 
-The bottom bar always shows the current track and play / pause / seek / volume. Click the **title** or the **album** name there, or press `Ctrl+C`, to return to the list that queue came from — the album, the artist, or the library — scrolled to the playing song. That works from any page. The artist name still opens that artist. Closing the panel does **not** stop playback.
+The bottom bar always shows the current track and play / pause / seek / volume. Click the **title** or the **album** name there, or press `Ctrl+C`, to return to the list that queue came from — the album, the artist, the genre, or the library — scrolled to the playing song. That works from any page. The artist name still opens that artist. Closing the panel does **not** stop playback.
 
 ### Keyboard shortcuts (panel open)
 
@@ -113,7 +114,7 @@ One highlight sits on the sidebar or on the page list. `Tab` and `Shift+Tab` swi
 | `Left` / `Right` | Previous / next cover, in tile view |
 | `Page Up` / `Page Down` | Jump one screen |
 | `Ctrl+Home` / `Ctrl+End` | First / last item |
-| `Enter` | Open the menu page, play the track, or open the album or artist |
+| `Enter` | Open the menu page, play the track, or open the album, artist, or genre |
 
 **Shuffle** is the ⇄ control on the bottom player bar, or `Ctrl+S`. When on (accent colour), the rest of the queue is randomized so **Next** picks a shuffled order; the current song finishes first. Turn it off to return to album/list order from the current track.
 
@@ -131,6 +132,7 @@ While `finalbossd` is running, system media keys and tools that speak MPRIS cont
 - **Remove folder** — Settings → remove that path. Tracks for that root leave the index; files on disk are untouched.
 - **Rescan** — Settings → Rescan. Use a full rescan when a NAS has flaky timestamps or you renamed many files.
 - **Same volume** — Settings → Same volume. Quiet and loud files are leveled so the next song plays at a similar volume. The slider still sets how loud the player is overall.
+- **Update metadata while scanning** — Settings checkbox, off by default. When it is on, a scan fills in missing genre and album art from MusicBrainz. Files with no artist and album are identified with an AcoustID fingerprint. Nothing is written back into the audio files. The first pass over a large library is slow on purpose (about one album per second).
 - **Offline share** — If a mount is missing, that folder shows as unavailable. Remount and rescan or wait for the next scan; the shell should stay responsive.
 
 Supported for indexing: FLAC, MP3, M4A/AAC, WAV, OGG, OPUS.  
@@ -177,4 +179,4 @@ The library database and artwork cache are left in place unless you delete them 
 
 ## What Final Boss Player does not do (v1)
 
-No playlists, Spotify, cloud accounts, lyrics, online metadata, or built-in SMB/NFS client. Use the OS to mount network shares, then point Final Boss Player at the mount path.
+No playlists, Spotify, cloud accounts, lyrics, or built-in SMB/NFS client. Online genre and cover lookup stays off unless **Update metadata while scanning** is checked. Use the OS to mount network shares, then point Final Boss Player at the mount path.

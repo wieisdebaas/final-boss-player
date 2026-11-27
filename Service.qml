@@ -18,7 +18,7 @@ Item {
   readonly property string pluginId: manifest && manifest.id
     ? String(manifest.id) : "io.github.finalboss.player"
 
-  readonly property var pages: ["home", "search", "library", "artists", "albums", "settings"]
+  readonly property var pages: ["home", "search", "library", "artists", "albums", "genres", "settings"]
   property string currentPage: "home"
   // Shared by every page. List rows, or a cover grid.
   property bool tiles: false
@@ -26,6 +26,7 @@ Item {
   // Drill-down selection for the albums/artists pages (null = show the list).
   property var selectedAlbum: null
   property var selectedArtist: null
+  property var selectedGenre: null
   // Search state lives here so Ctrl+F can focus it from anywhere.
   property string searchQuery: ""
   property int searchFocusRequest: 0
@@ -40,6 +41,8 @@ Item {
     shuffle: false,
     repeat: "off",
     normalize: false,
+    update_metadata: false,
+    metadata: null,
     scan: null,
     folders: [],
     error_code: null,
@@ -53,6 +56,7 @@ Item {
   readonly property bool playing: playerState.playing === true
   readonly property bool shuffle: playerState.shuffle === true
   readonly property bool normalize: playerState.normalize === true
+  readonly property bool updateMetadata: playerState.update_metadata === true
   readonly property var track: playerState.track || null
   readonly property string title: track && track.title ? String(track.title) : ""
   readonly property string artist: track && track.artist ? String(track.artist) : ""
@@ -86,6 +90,7 @@ Item {
     // Re-selecting a sidebar entry returns to its top-level list.
     selectedAlbum = null
     selectedArtist = null
+    selectedGenre = null
     currentPage = next
     return true
   }
@@ -98,6 +103,20 @@ Item {
   function openArtist(artist) {
     selectedArtist = artist || null
     currentPage = "artists"
+  }
+
+  function openGenre(genre) {
+    selectedGenre = genre || null
+    currentPage = "genres"
+  }
+
+  function openGenreFromTrack(track) {
+    if (!track || !track.genre) return false
+    openGenre({
+      name: String(track.genre),
+      has_art: true
+    })
+    return true
   }
 
   function openAlbumFromTrack(track) {
@@ -135,6 +154,9 @@ Item {
     } else if (scope === "artist") {
       page = "artists"
       opened = openArtistFromTrack(track)
+    } else if (scope === "genre") {
+      page = "genres"
+      opened = openGenreFromTrack(track)
     } else {
       opened = openAlbumFromTrack(track)
     }
@@ -252,6 +274,9 @@ Item {
   function playArtist(artistId, callback) {
     return request("play_artist", { artist_id: artistId }, callback)
   }
+  function playGenre(name, callback) {
+    return request("play_genre", { name: String(name || "") }, callback)
+  }
   function addFolder(path, callback) {
     return request("add_folder", { path: String(path || "") }, callback)
   }
@@ -287,11 +312,23 @@ Item {
   function setNormalize(enabled) {
     return request("set_normalize", { enabled: enabled === true }, null)
   }
+  function setUpdateMetadata(enabled) {
+    return request("set_update_metadata", { enabled: enabled === true }, null)
+  }
 
+  property int metadataLooked: -1
   function applyState(next) {
     var wasScanning = scanning
+    var looked = -1
+    if (next && next.metadata && next.metadata.looked !== undefined && next.metadata.looked !== null)
+      looked = Number(next.metadata.looked)
+    var previousLooked = metadataLooked
     playerState = next
     if (wasScanning && !scanning) libraryRevision++
+    if (looked !== previousLooked) {
+      metadataLooked = looked
+      if (looked > previousLooked && looked > 0) libraryRevision++
+    }
   }
 
   BackendClient {

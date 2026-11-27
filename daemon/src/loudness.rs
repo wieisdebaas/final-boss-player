@@ -100,8 +100,15 @@ fn measure(path: &Path) -> Option<(f32, f32)> {
         .ok()?;
 
     let mut meter = Meter::default();
-    decode_for(&mut format, &mut decoder, track_id, &mut meter, SAMPLE_SECONDS);
-    if let (Some(base), Some(n_frames)) = (track.codec_params.time_base, track.codec_params.n_frames)
+    decode_for(
+        &mut format,
+        &mut decoder,
+        track_id,
+        &mut meter,
+        SAMPLE_SECONDS,
+    );
+    if let (Some(base), Some(n_frames)) =
+        (track.codec_params.time_base, track.codec_params.n_frames)
     {
         let duration = base.calc_time(n_frames);
         if duration.seconds > SAMPLE_SECONDS * 2 {
@@ -117,7 +124,13 @@ fn measure(path: &Path) -> Option<(f32, f32)> {
                 .is_ok()
             {
                 decoder.reset();
-                decode_for(&mut format, &mut decoder, track_id, &mut meter, SAMPLE_SECONDS);
+                decode_for(
+                    &mut format,
+                    &mut decoder,
+                    track_id,
+                    &mut meter,
+                    SAMPLE_SECONDS,
+                );
             }
         }
     }
@@ -190,7 +203,11 @@ impl Meter {
         if abs > self.peak {
             self.peak = abs;
         }
-        let window = if self.window_len == 0 { 1 } else { self.window_len };
+        let window = if self.window_len == 0 {
+            1
+        } else {
+            self.window_len
+        };
         self.window_sum += f64::from(sample) * f64::from(sample);
         self.window_count += 1;
         if self.window_count >= window {

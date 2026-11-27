@@ -416,6 +416,8 @@ pub struct Engine {
     queue_scope: String,
     /// Level each track toward the same loudness.
     normalize: bool,
+    /// Fill missing genre and cover art from the network during a scan.
+    update_metadata: bool,
     /// Gain for the loaded track. `1.0` when normalization is off.
     track_gain: f32,
     gains: HashMap<String, f32>,
@@ -434,6 +436,7 @@ impl Engine {
             error: None,
             queue_scope: "album".into(),
             normalize: false,
+            update_metadata: false,
             track_gain: 1.0,
             gains: HashMap::new(),
             settings_path: None,
@@ -476,6 +479,7 @@ impl Engine {
             error_message: self.error.as_ref().map(|error| error.message.clone()),
             scope: self.queue_scope.clone(),
             normalize: self.normalize,
+            update_metadata: self.update_metadata,
         }
     }
 
@@ -574,7 +578,13 @@ impl Engine {
         self.save_settings();
     }
 
-    /// Reads the saved Same volume switch. Missing files leave it off.
+    pub fn set_update_metadata(&mut self, enabled: bool) {
+        self.update_metadata = enabled;
+        self.save_settings();
+    }
+
+    /// Reads the saved Same volume and metadata switches. Missing files leave
+    /// both off.
     pub fn load_settings(&mut self, path: &Path) {
         self.settings_path = Some(path.to_path_buf());
         let Ok(bytes) = fs::read(path) else {
@@ -584,9 +594,12 @@ impl Engine {
         struct Saved {
             #[serde(default)]
             normalize: bool,
+            #[serde(default)]
+            update_metadata: bool,
         }
         if let Ok(saved) = serde_json::from_slice::<Saved>(&bytes) {
             self.normalize = saved.normalize;
+            self.update_metadata = saved.update_metadata;
         }
     }
 
@@ -594,7 +607,10 @@ impl Engine {
         let Some(path) = &self.settings_path else {
             return;
         };
-        let body = serde_json::json!({ "normalize": self.normalize });
+        let body = serde_json::json!({
+            "normalize": self.normalize,
+            "update_metadata": self.update_metadata,
+        });
         let Ok(bytes) = serde_json::to_vec(&body) else {
             return;
         };
@@ -780,6 +796,7 @@ pub enum Cmd {
     SetShuffle(bool),
     SetRepeat(String),
     SetNormalize(bool),
+    SetUpdateMetadata(bool),
 }
 
 pub struct Restore {
@@ -923,6 +940,10 @@ fn apply(engine: &mut Engine, cmd: Cmd) -> Result<(), PlayError> {
         Cmd::SetRepeat(mode) => engine.set_repeat(&mode),
         Cmd::SetNormalize(enabled) => {
             engine.set_normalize(enabled);
+            Ok(())
+        }
+        Cmd::SetUpdateMetadata(enabled) => {
+            engine.set_update_metadata(enabled);
             Ok(())
         }
     }

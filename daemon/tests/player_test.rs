@@ -337,6 +337,23 @@ fn same_volume_switch_is_reported_and_remembered() {
 }
 
 #[test]
+fn metadata_switch_is_remembered_with_the_volume_switch() {
+    let dir = tempdir().unwrap();
+    let path = dir.path().join("settings.json");
+    let (mut first, _) = engine();
+    first.load_settings(&path);
+    first.set_update_metadata(true);
+    first.set_normalize(true);
+    assert!(first.view().update_metadata);
+    assert!(first.view().normalize);
+
+    let (mut restored, _) = engine();
+    restored.load_settings(&path);
+    assert!(restored.view().update_metadata);
+    assert!(restored.view().normalize);
+}
+
+#[test]
 fn engine_pause_toggle_seek_and_volume() {
     let dir = tempdir().unwrap();
     let (mut engine, fake) = engine();

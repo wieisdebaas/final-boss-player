@@ -5,6 +5,12 @@ mod art;
 #[path = "../src/db.rs"]
 mod db;
 #[allow(dead_code)]
+#[path = "../src/fingerprint.rs"]
+mod fingerprint;
+#[allow(dead_code)]
+#[path = "../src/lookup.rs"]
+mod lookup;
+#[allow(dead_code)]
 #[path = "../src/loudness.rs"]
 mod loudness;
 #[allow(dead_code)]

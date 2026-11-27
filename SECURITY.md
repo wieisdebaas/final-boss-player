@@ -2,8 +2,11 @@
 
 ## Scope
 
-Final Boss Player indexes and streams files from paths you configure. It does not
-talk to cloud services or scrape online metadata.
+Final Boss Player indexes and streams files from paths you configure. Online
+metadata lookup (MusicBrainz, Cover Art Archive, and AcoustID) runs only when
+**Update metadata while scanning** is on. It sends album and artist names, and
+for files without those tags a short audio fingerprint. It does not upload the
+audio itself.
 
 ## Reporting
 

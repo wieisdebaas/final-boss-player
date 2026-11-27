@@ -25,7 +25,10 @@ fn cache_path_is_stable_for_album_id() {
         art::artist_cache_path(&art_dir, 42),
         art_dir.join("artist-42.jpg")
     );
-    assert_ne!(art::cache_path(&art_dir, 42), art::artist_cache_path(&art_dir, 42));
+    assert_ne!(
+        art::cache_path(&art_dir, 42),
+        art::artist_cache_path(&art_dir, 42)
+    );
 }
 
 #[test]

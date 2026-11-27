@@ -4,7 +4,7 @@ use std::path::Path;
 use rusqlite::{ffi, params, params_from_iter, Connection, Result, TransactionBehavior};
 use serde::Serialize;
 
-const SUPPORTED_SCHEMA_VERSION: i64 = 1;
+const SUPPORTED_SCHEMA_VERSION: i64 = 2;
 const VERSION_ONE_SCHEMA: &str = "
     CREATE TABLE folders (
         id INTEGER PRIMARY KEY,
@@ -54,6 +54,27 @@ const VERSION_ONE_SCHEMA: &str = "
     CREATE INDEX plays_track_id_idx ON plays(track_id);
     PRAGMA user_version = 1;
 ";
+
+const VERSION_TWO_SCHEMA: &str = "
+    ALTER TABLE albums ADD COLUMN has_cover INTEGER NOT NULL DEFAULT 0;
+    CREATE TABLE metadata_lookups (
+        album_key TEXT PRIMARY KEY,
+        status TEXT NOT NULL,
+        release_mbid TEXT,
+        genre TEXT,
+        looked_up_at INTEGER NOT NULL
+    );
+    PRAGMA user_version = 2;
+";
+
+/// Stable identity for a metadata lookup: trimmed, lowercased artist and album.
+pub fn album_key(artist: &str, album: &str) -> String {
+    format!(
+        "{}\u{0}{}",
+        artist.trim().to_lowercase(),
+        album.trim().to_lowercase()
+    )
+}
 
 pub struct Db {
     connection: Connection,
@@ -126,6 +147,33 @@ pub struct Artist {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct Genre {
+    pub name: String,
+    pub album_count: i64,
+    pub track_count: i64,
+    pub has_art: bool,
+}
+
+/// An album that still needs a genre, a cover, or both.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AlbumGap {
+    pub id: i64,
+    pub name: String,
+    pub artist: String,
+    pub needs_genre: bool,
+    pub needs_art: bool,
+    pub sample_path: String,
+    pub duration_ms: i64,
+}
+
+/// Where a genre or artist tile can find a picture.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CoverLead {
+    pub album_id: i64,
+    pub embedded_path: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct LibraryStats {
     pub folders: i64,
     pub tracks: i64,
@@ -147,20 +195,26 @@ impl Db {
         connection.execute_batch("PRAGMA foreign_keys = ON;")?;
         let version = Self::read_user_version(&connection)?;
         Self::check_supported(version)?;
-        if version == 0 {
-            // WAL lets long scans write without blocking UI reads. It is
-            // persistent in the file, so this is a no-op after the first open.
-            // Not fatal: some filesystems cannot do WAL.
-            if let Err(error) = connection.query_row("PRAGMA journal_mode = WAL", [], |row| {
-                row.get::<_, String>(0)
-            }) {
-                tracing::warn!(%error, "could not enable WAL journal mode");
+        if version < SUPPORTED_SCHEMA_VERSION {
+            if version == 0 {
+                // WAL lets long scans write without blocking UI reads. It is
+                // persistent in the file, so this is a no-op after the first open.
+                // Not fatal: some filesystems cannot do WAL.
+                if let Err(error) = connection.query_row("PRAGMA journal_mode = WAL", [], |row| {
+                    row.get::<_, String>(0)
+                }) {
+                    tracing::warn!(%error, "could not enable WAL journal mode");
+                }
             }
             let migration = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
             let version = Self::read_user_version(&migration)?;
             Self::check_supported(version)?;
             if version == 0 {
                 migration.execute_batch(VERSION_ONE_SCHEMA)?;
+            }
+            let version = Self::read_user_version(&migration)?;
+            if version == 1 {
+                migration.execute_batch(VERSION_TWO_SCHEMA)?;
             }
             migration.commit()?;
         }
@@ -477,7 +531,9 @@ impl Db {
     pub fn list_albums(&self, limit: u32, offset: u32) -> Result<Vec<Album>> {
         let mut statement = self.connection.prepare(
             "SELECT a.id, a.name, NULLIF(a.album_artist, ''), a.year,
-                    COUNT(t.id), COALESCE(MAX(t.has_art), 0)
+                    COUNT(t.id),
+                    CASE WHEN COALESCE(MAX(t.has_art), 0) = 1 OR a.has_cover = 1
+                         THEN 1 ELSE 0 END
              FROM albums a
              JOIN tracks t ON t.album_id = a.id
              GROUP BY a.id
@@ -502,9 +558,11 @@ impl Db {
     pub fn list_artists(&self, limit: u32, offset: u32) -> Result<Vec<Artist>> {
         let mut statement = self.connection.prepare(
             "SELECT a.id, a.name, COUNT(DISTINCT t.album_id), COUNT(t.id),
-                    COALESCE(MAX(t.has_art), 0)
+                    COALESCE(MAX(CASE WHEN t.has_art = 1 OR IFNULL(al.has_cover, 0) = 1
+                                      THEN 1 ELSE 0 END), 0)
              FROM artists a
              JOIN tracks t ON t.artist_id = a.id
+             LEFT JOIN albums al ON al.id = t.album_id
              GROUP BY a.id
              ORDER BY a.name COLLATE NOCASE
              LIMIT ?1 OFFSET ?2",
@@ -521,6 +579,33 @@ impl Db {
             })?
             .collect();
         artists
+    }
+
+    pub fn list_genres(&self, limit: u32, offset: u32) -> Result<Vec<Genre>> {
+        let mut statement = self.connection.prepare(
+            "SELECT MIN(t.genre),
+                    COUNT(DISTINCT t.album_id),
+                    COUNT(t.id),
+                    COALESCE(MAX(CASE WHEN t.has_art = 1 OR IFNULL(a.has_cover, 0) = 1
+                                      THEN 1 ELSE 0 END), 0)
+             FROM tracks t
+             LEFT JOIN albums a ON a.id = t.album_id
+             WHERE t.genre IS NOT NULL AND TRIM(t.genre) != ''
+             GROUP BY t.genre COLLATE NOCASE
+             ORDER BY MIN(t.genre) COLLATE NOCASE
+             LIMIT ?1 OFFSET ?2",
+        )?;
+        let genres = statement
+            .query_map(params![limit, offset], |row| {
+                Ok(Genre {
+                    name: row.get(0)?,
+                    album_count: row.get(1)?,
+                    track_count: row.get(2)?,
+                    has_art: row.get::<_, i64>(3)? != 0,
+                })
+            })?
+            .collect();
+        genres
     }
 
     pub fn album_tracks(&self, album_id: i64) -> Result<Vec<Track>> {
@@ -550,6 +635,23 @@ impl Db {
         )?;
         let tracks = statement
             .query_map(params![artist_id, limit, offset], map_track)?
+            .collect();
+        tracks
+    }
+
+    pub fn genre_tracks(&self, genre: &str, limit: u32, offset: u32) -> Result<Vec<Track>> {
+        let mut statement = self.connection.prepare(
+            "SELECT id, folder_id, path, size, mtime, title, artist, album_artist,
+                    album, track_no, disc_no, year, genre, duration_ms, has_art, added_at,
+                    album_id, artist_id
+             FROM tracks
+             WHERE genre = ?1 COLLATE NOCASE
+             ORDER BY album COLLATE NOCASE, COALESCE(disc_no, 1),
+                      COALESCE(track_no, 2147483647), title COLLATE NOCASE, id
+             LIMIT ?2 OFFSET ?3",
+        )?;
+        let tracks = statement
+            .query_map(params![genre, limit, offset], map_track)?
             .collect();
         tracks
     }
@@ -587,6 +689,201 @@ impl Db {
         }
     }
 
+    /// A downloaded or embedded cover for this genre, preferring a cached album.
+    pub fn genre_cover_lead(&self, genre: &str) -> Result<Option<CoverLead>> {
+        self.cover_lead(
+            "SELECT a.id, a.has_cover,
+                    (SELECT path FROM tracks
+                     WHERE album_id = a.id AND has_art = 1
+                     ORDER BY COALESCE(disc_no, 1), COALESCE(track_no, 2147483647), id
+                     LIMIT 1)
+             FROM tracks t
+             JOIN albums a ON a.id = t.album_id
+             WHERE t.genre = ?1 COLLATE NOCASE
+               AND (a.has_cover = 1 OR t.has_art = 1)
+             ORDER BY a.has_cover DESC, a.name COLLATE NOCASE
+             LIMIT 1",
+            genre,
+        )
+    }
+
+    /// An album whose downloaded cover can stand in for this artist.
+    pub fn artist_cached_album(&self, artist_id: i64) -> Result<Option<i64>> {
+        match self.connection.query_row(
+            "SELECT a.id FROM tracks t
+             JOIN albums a ON a.id = t.album_id
+             WHERE t.artist_id = ?1 AND a.has_cover = 1
+             ORDER BY a.name COLLATE NOCASE
+             LIMIT 1",
+            [artist_id],
+            |row| row.get(0),
+        ) {
+            Ok(id) => Ok(Some(id)),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+            Err(error) => Err(error),
+        }
+    }
+
+    fn cover_lead(&self, sql: &str, key: &str) -> Result<Option<CoverLead>> {
+        match self.connection.query_row(sql, [key], |row| {
+            Ok(CoverLead {
+                album_id: row.get(0)?,
+                embedded_path: row.get(2)?,
+            })
+        }) {
+            Ok(lead) => Ok(Some(lead)),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+            Err(error) => Err(error),
+        }
+    }
+
+    /// Albums still missing a genre or a cover, skipping ones already looked up.
+    pub fn albums_missing_metadata(&self) -> Result<Vec<AlbumGap>> {
+        let mut statement = self.connection.prepare(
+            "SELECT a.id, a.name,
+                    CASE
+                      WHEN TRIM(a.album_artist) != '' THEN a.album_artist
+                      ELSE COALESCE((
+                        SELECT t2.artist FROM tracks t2
+                        WHERE t2.album_id = a.id
+                          AND t2.artist IS NOT NULL AND TRIM(t2.artist) != ''
+                        ORDER BY COALESCE(t2.disc_no, 1),
+                                 COALESCE(t2.track_no, 2147483647), t2.id
+                        LIMIT 1
+                      ), '')
+                    END,
+                    SUM(CASE WHEN t.genre IS NULL OR TRIM(t.genre) = '' THEN 1 ELSE 0 END),
+                    CASE WHEN COALESCE(MAX(t.has_art), 0) = 0 AND a.has_cover = 0
+                         THEN 1 ELSE 0 END,
+                    (SELECT t3.path FROM tracks t3
+                     WHERE t3.album_id = a.id
+                     ORDER BY COALESCE(t3.disc_no, 1),
+                              COALESCE(t3.track_no, 2147483647), t3.id
+                     LIMIT 1),
+                    (SELECT t4.duration_ms FROM tracks t4
+                     WHERE t4.album_id = a.id
+                     ORDER BY COALESCE(t4.disc_no, 1),
+                              COALESCE(t4.track_no, 2147483647), t4.id
+                     LIMIT 1)
+             FROM albums a
+             JOIN tracks t ON t.album_id = a.id
+             GROUP BY a.id
+             HAVING SUM(CASE WHEN t.genre IS NULL OR TRIM(t.genre) = '' THEN 1 ELSE 0 END) > 0
+                 OR (COALESCE(MAX(t.has_art), 0) = 0 AND a.has_cover = 0)",
+        )?;
+        let gaps: Vec<AlbumGap> = statement
+            .query_map([], |row| {
+                Ok(AlbumGap {
+                    id: row.get(0)?,
+                    name: row.get(1)?,
+                    artist: row.get(2)?,
+                    needs_genre: row.get::<_, i64>(3)? > 0,
+                    needs_art: row.get::<_, i64>(4)? != 0,
+                    sample_path: row.get(5)?,
+                    duration_ms: row.get(6)?,
+                })
+            })?
+            .collect::<Result<_>>()?;
+        let mut missing = Vec::new();
+        for gap in gaps {
+            if !self.has_lookup(&album_key(&gap.artist, &gap.name))? {
+                missing.push(gap);
+            }
+        }
+        Ok(missing)
+    }
+
+    pub fn has_lookup(&self, key: &str) -> Result<bool> {
+        match self.connection.query_row(
+            "SELECT 1 FROM metadata_lookups WHERE album_key = ?1",
+            [key],
+            |_| Ok(()),
+        ) {
+            Ok(()) => Ok(true),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(false),
+            Err(error) => Err(error),
+        }
+    }
+
+    pub fn remember_lookup(
+        &self,
+        key: &str,
+        found: bool,
+        release_mbid: Option<&str>,
+        genre: Option<&str>,
+    ) -> Result<()> {
+        let status = if found { "found" } else { "not_found" };
+        self.connection.execute(
+            "INSERT INTO metadata_lookups(album_key, status, release_mbid, genre, looked_up_at)
+             VALUES (?1, ?2, ?3, ?4, unixepoch())
+             ON CONFLICT(album_key) DO UPDATE SET
+                status = excluded.status,
+                release_mbid = excluded.release_mbid,
+                genre = excluded.genre,
+                looked_up_at = excluded.looked_up_at",
+            params![key, status, release_mbid, genre],
+        )?;
+        Ok(())
+    }
+
+    /// Sets `genre` on tracks in the album whose genre is still empty.
+    pub fn fill_empty_genre(&self, album_id: i64, genre: &str) -> Result<usize> {
+        let changed = self.connection.execute(
+            "UPDATE tracks SET genre = ?1
+             WHERE album_id = ?2 AND (genre IS NULL OR TRIM(genre) = '')",
+            params![genre, album_id],
+        )?;
+        Ok(changed)
+    }
+
+    pub fn mark_album_cover(&self, album_id: i64) -> Result<()> {
+        self.connection
+            .execute("UPDATE albums SET has_cover = 1 WHERE id = ?1", [album_id])?;
+        Ok(())
+    }
+
+    /// Writes remembered genres back onto tracks a rescan cleared.
+    pub fn refill_cached_genres(&self) -> Result<u32> {
+        let mut stored = self.connection.prepare(
+            "SELECT album_key, genre FROM metadata_lookups
+             WHERE status = 'found' AND genre IS NOT NULL AND TRIM(genre) != ''",
+        )?;
+        let found: Vec<(String, String)> = stored
+            .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?
+            .collect::<Result<_>>()?;
+        drop(stored);
+        if found.is_empty() {
+            return Ok(0);
+        }
+        let mut albums = self.connection.prepare(
+            "SELECT a.id, a.name,
+                    CASE
+                      WHEN TRIM(a.album_artist) != '' THEN a.album_artist
+                      ELSE COALESCE((
+                        SELECT t2.artist FROM tracks t2
+                        WHERE t2.album_id = a.id
+                          AND t2.artist IS NOT NULL AND TRIM(t2.artist) != ''
+                        ORDER BY COALESCE(t2.disc_no, 1),
+                                 COALESCE(t2.track_no, 2147483647), t2.id
+                        LIMIT 1
+                      ), '')
+                    END
+             FROM albums a",
+        )?;
+        let rows: Vec<(i64, String, String)> = albums
+            .query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))?
+            .collect::<Result<_>>()?;
+        drop(albums);
+        let mut filled = 0u32;
+        for (id, name, artist) in rows {
+            let key = album_key(&artist, &name);
+            if let Some((_, genre)) = found.iter().find(|(stored, _)| stored == &key) {
+                filled += u32::try_from(self.fill_empty_genre(id, genre)?).unwrap_or(0);
+            }
+        }
+        Ok(filled)
+    }
+
     /// Play queue for `scope`.
     ///
     /// `"library"` is every track in library order. `"artist"` is every track
@@ -603,6 +900,7 @@ impl Db {
                 Ok(queue_index(tracks, track_id))
             }
             "artist" => self.queue_for_artist(track_id),
+            "genre" => self.queue_for_genre(track_id),
             _ => self.queue_for_track(track_id),
         }
     }
@@ -651,6 +949,27 @@ impl Db {
         };
         if let Some(artist_id) = artist_id {
             let tracks = self.artist_tracks(artist_id, u32::MAX, 0)?;
+            if let Some(queue) = queue_index(tracks, track_id) {
+                return Ok(Some(queue));
+            }
+        }
+        self.queue_for_track(track_id)
+    }
+
+    /// Every track in this track's genre. A track with no genre falls back
+    /// to its album queue.
+    fn queue_for_genre(&self, track_id: i64) -> Result<Option<(Vec<Track>, usize)>> {
+        let genre = match self.connection.query_row(
+            "SELECT genre FROM tracks WHERE id = ?1",
+            [track_id],
+            |row| row.get::<_, Option<String>>(0),
+        ) {
+            Ok(genre) => genre,
+            Err(rusqlite::Error::QueryReturnedNoRows) => return Ok(None),
+            Err(error) => return Err(error),
+        };
+        if let Some(genre) = genre.filter(|genre| !genre.trim().is_empty()) {
+            let tracks = self.genre_tracks(&genre, u32::MAX, 0)?;
             if let Some(queue) = queue_index(tracks, track_id) {
                 return Ok(Some(queue));
             }

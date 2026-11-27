@@ -169,9 +169,10 @@ Design and implementation notes live under `docs/superpowers/` for contributors.
 
 ## Privacy
 
-No accounts, no cloud, no online metadata lookups. Music stays on your mounts;
-only a local index and small artwork thumbnails are written under your home
-directory.
+No accounts and no cloud library. Music stays on your mounts. Online genre and
+cover lookup runs only when **Update metadata while scanning** is checked in
+Settings. That writes into the local index and the artwork cache, not into
+your audio files.
 
 ## License
 

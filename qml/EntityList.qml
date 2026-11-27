@@ -12,7 +12,7 @@ Item {
 
   property var items: []
   property var service: null
-  // Album rows use get_art. Artist rows use get_artist_art (embedded track art).
+  // Album rows use get_art. Artist rows use get_artist_art. Genre rows use get_genre_art.
   property bool covers: false
   property string coverKind: "album"
   property bool playable: false
@@ -83,9 +83,15 @@ Item {
     publishKeyboard()
   }
 
-  function artCommand(entityId) {
-    if (coverKind === "artist") return ["get_artist_art", { artist_id: entityId }]
-    return ["get_art", { album_id: entityId }]
+  function entityKey(item) {
+    if (coverKind === "genre") return "genre:" + String(item && item.name || "")
+    return coverKind + ":" + String(item && item.id)
+  }
+
+  function artCommand(item) {
+    if (coverKind === "artist") return ["get_artist_art", { artist_id: Number(item.id) }]
+    if (coverKind === "genre") return ["get_genre_art", { name: String(item.name || "") }]
+    return ["get_art", { album_id: Number(item.id) }]
   }
 
   ListView {
@@ -150,22 +156,21 @@ Item {
           : "transparent")
 
       property string artPath: ""
-      property int artEntityId: -1
+      property string artKey: ""
 
       function refreshArt() {
         if (!root.covers || !root.service || !root.service.connected || row.modelData.has_art !== true) {
           artPath = ""
-          artEntityId = -1
+          artKey = ""
           return
         }
-        var entityId = Number(row.modelData.id)
-        if (!(entityId >= 0)) return
-        if (entityId === artEntityId) return
-        artEntityId = entityId
+        var key = root.entityKey(row.modelData)
+        if (key === artKey) return
+        artKey = key
         artPath = ""
-        var request = root.artCommand(entityId)
+        var request = root.artCommand(row.modelData)
         root.service.request(request[0], request[1], function(ok, result) {
-          if (entityId !== row.artEntityId) return
+          if (key !== row.artKey) return
           row.artPath = ok && result && result.path ? String(result.path) : ""
         })
       }
@@ -261,22 +266,21 @@ Item {
       height: GridView.view.cellHeight
 
       property string artPath: ""
-      property int artEntityId: -1
+      property string artKey: ""
 
       function refreshArt() {
         if (!root.covers || !root.service || !root.service.connected || tile.modelData.has_art !== true) {
           artPath = ""
-          artEntityId = -1
+          artKey = ""
           return
         }
-        var entityId = Number(tile.modelData.id)
-        if (!(entityId >= 0)) return
-        if (entityId === artEntityId) return
-        artEntityId = entityId
+        var key = root.entityKey(tile.modelData)
+        if (key === artKey) return
+        artKey = key
         artPath = ""
-        var request = root.artCommand(entityId)
+        var request = root.artCommand(tile.modelData)
         root.service.request(request[0], request[1], function(ok, result) {
-          if (entityId !== tile.artEntityId) return
+          if (key !== tile.artKey) return
           tile.artPath = ok && result && result.path ? String(result.path) : ""
         })
       }
