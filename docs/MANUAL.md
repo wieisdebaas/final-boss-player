@@ -13,7 +13,7 @@
 **From Omarchy (recommended for users):**
 
 ```sh
-omarchy plugin add https://github.com/wieisdebaas/finalboss-player.git --enable
+omarchy plugin add https://github.com/wieisdebaas/final-boss-player.git --enable
 cd ~/.config/omarchy/plugins/io.github.finalboss.player
 ./scripts/install.sh
 omarchy-restart-shell

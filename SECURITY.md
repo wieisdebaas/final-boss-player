@@ -8,7 +8,7 @@ talk to cloud services or scrape online metadata.
 ## Reporting
 
 Please open a private GitHub security advisory on
-[wieisdebaas/finalboss-player](https://github.com/wieisdebaas/finalboss-player)
+[wieisdebaas/final-boss-player](https://github.com/wieisdebaas/final-boss-player)
 or email the maintainer listed in the repository profile. Do not file public
 issues for unfixed vulnerabilities.
 

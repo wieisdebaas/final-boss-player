@@ -1,6 +1,6 @@
 ### Repository URL
 
-https://github.com/wieisdebaas/finalboss-player
+https://github.com/wieisdebaas/final-boss-player
 
 ### Category
 
@@ -19,7 +19,7 @@ music
 Final Boss Player is an Omarchy Quickshell plugin (service + bar widget + panel) with a Rust playback daemon (`finalbossd`). It indexes and streams local/NAS folders (SMB/NFS mounts); no cloud accounts.
 
 **Install (two steps):**
-1. `omarchy plugin add https://github.com/wieisdebaas/finalboss-player.git --enable`
+1. `omarchy plugin add https://github.com/wieisdebaas/final-boss-player.git --enable`
 2. `cd ~/.config/omarchy/plugins/io.github.finalboss.player && ./scripts/install.sh` then `omarchy-restart-shell`
 
 **Dependencies:** Rust/`cargo` (to build the daemon once), PipeWire/Pulse for audio. Optional: `playerctl` for CLI MPRIS control.

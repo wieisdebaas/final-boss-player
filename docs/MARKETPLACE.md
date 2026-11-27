@@ -10,8 +10,8 @@ a music / NAS player.
 | --- | --- |
 | **Name** | Final Boss Player |
 | **Plugin id** | `io.github.finalboss.player` |
-| **Repository** | `https://github.com/wieisdebaas/finalboss-player.git` |
-| **Homepage** | `https://github.com/wieisdebaas/finalboss-player` |
+| **Repository** | `https://github.com/wieisdebaas/final-boss-player.git` |
+| **Homepage** | `https://github.com/wieisdebaas/final-boss-player` |
 | **License** | MIT |
 | **Category** | `Desktop` |
 | **Tags** (max 3) | `media`, `quickshell`, `bar` |
@@ -90,7 +90,7 @@ omarchy quickshell music-player nas hyprland qml rust linux mpris flac
 Set with:
 
 ```sh
-gh repo edit wieisdebaas/finalboss-player --add-topic omarchy --add-topic quickshell \
+gh repo edit wieisdebaas/final-boss-player --add-topic omarchy --add-topic quickshell \
   --add-topic music-player --add-topic nas --add-topic hyprland --add-topic qml \
   --add-topic rust --add-topic linux --add-topic mpris --add-topic flac
 ```

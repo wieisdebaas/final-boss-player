@@ -5,7 +5,7 @@
   "version": "0.1.0",
   "author": "Robin Smits",
   "license": "MIT",
-  "homepage": "https://github.com/wieisdebaas/finalboss-player",
+  "homepage": "https://github.com/wieisdebaas/final-boss-player",
   "description": "Stream your NAS and local music library from the Omarchy bar and panel.",
   "icon": "icon.png",
   "kinds": [

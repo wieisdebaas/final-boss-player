@@ -68,7 +68,7 @@ Requires [Omarchy](https://omarchy.org/) (Quickshell shell), a Rust toolchain
 
 ```sh
 # 1. Install the shell plugin
-omarchy plugin add https://github.com/wieisdebaas/finalboss-player.git --enable
+omarchy plugin add https://github.com/wieisdebaas/final-boss-player.git --enable
 
 # 2. Build and enable the playback daemon (systemd --user)
 cd ~/.config/omarchy/plugins/io.github.finalboss.player
@@ -138,8 +138,8 @@ decoder (documented in the manual).
 ## Development
 
 ```sh
-git clone https://github.com/wieisdebaas/finalboss-player.git
-cd finalboss-player
+git clone https://github.com/wieisdebaas/final-boss-player.git
+cd final-boss-player
 
 # Link into Omarchy + build daemon
 ./scripts/dev-link.sh
