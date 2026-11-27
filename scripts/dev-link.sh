@@ -11,7 +11,8 @@
 set -euo pipefail
 
 PLUGIN_ID="io.github.finalboss.player"
-REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# Physical path, so a symlink install cannot be linked back onto itself.
+REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
 PLUGINS_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/omarchy/plugins"
 TARGET="$PLUGINS_DIR/$PLUGIN_ID"
 
@@ -26,6 +27,10 @@ if [[ "${1:-}" == "--unlink" ]]; then
 fi
 
 [[ -f "$REPO/manifest.json" ]] || { echo "manifest.json not found in $REPO" >&2; exit 1; }
+if [[ "$REPO" == "$TARGET" ]]; then
+  echo "Refusing to link $TARGET to itself." >&2
+  exit 1
+fi
 
 mkdir -p "$PLUGINS_DIR"
 

@@ -19,7 +19,10 @@
 # (e.g. `omarchy-restart-shell`) or enable the plugin from shell settings.
 set -euo pipefail
 
-REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# Physical path. A logical `pwd` while this script is run through the plugin
+# symlink makes REPO equal the symlink, and the dev link below then points
+# the plugin directory at itself.
+REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
 LIB_DIR="${FINALBOSS_LIB_DIR:-$HOME/.local/lib/finalboss}"
 BINARY="$LIB_DIR/finalbossd"
 UNIT_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
@@ -100,7 +103,9 @@ fi
 
 PLUGIN_ID="io.github.finalboss.player"
 PLUGIN_TARGET="${XDG_CONFIG_HOME:-$HOME/.config}/omarchy/plugins/$PLUGIN_ID"
-if [[ -L "$PLUGIN_TARGET" ]] || [[ ! -e "$PLUGIN_TARGET" ]]; then
+if [[ "$REPO" == "$PLUGIN_TARGET" ]]; then
+  echo "==> Omarchy plugin already installed at $PLUGIN_TARGET (skipping link)"
+elif [[ -L "$PLUGIN_TARGET" ]] || [[ ! -e "$PLUGIN_TARGET" ]]; then
   echo "==> Linking Omarchy plugin (development)"
   run "$REPO/scripts/dev-link.sh"
 elif [[ "$(cd "$PLUGIN_TARGET" && pwd -P)" == "$(cd "$REPO" && pwd -P)" ]]; then
