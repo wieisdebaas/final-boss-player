@@ -18,6 +18,8 @@ Item {
   readonly property bool connected: service ? service.connected : false
   readonly property var keyboardLists: [resultList]
 
+  function editingInput() { return input }
+
   function runSearch() {
     var text = queryText.trim()
     requestSerial++

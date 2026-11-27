@@ -22,6 +22,8 @@ Item {
     return "Last scan indexed " + done + " files"
   }
 
+  function editingInput() { return pathInput }
+
   function report(ok, error, success) {
     statusIsError = !ok
     statusText = ok ? success : String(error || "Request failed")

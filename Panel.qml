@@ -193,6 +193,34 @@ Item {
     setFocusedList(lists[contentSlot])
   }
 
+  function pointInItem(item, area, x, y) {
+    if (!item) return false
+    var local = item.mapFromItem(area, x, y)
+    return item.contains(local)
+  }
+
+  function editingInput() {
+    if (currentPage === "search") return searchPage.editingInput()
+    if (currentPage === "settings") return settingsPage.editingInput()
+    return null
+  }
+
+  // A text field keeps active focus until another item takes it. Clicks on
+  // the rest of the window do not, so shortcuts stay swallowed. Drop it.
+  function releaseEditing() {
+    var field = editingInput()
+    if (field && field.focus) field.focus = false
+    focusScope.forceActiveFocus()
+  }
+
+  // Open the list this queue came from and center the playing track.
+  function hopToPlaying() {
+    if (!service || !service.openPlayingContext()) return
+    keyRegion = "list"
+    focusScope.forceActiveFocus()
+    ensureList()
+  }
+
   function activateKey() {
     if (keyRegion === "menu") {
       if (service && menuIndex >= 0 && menuIndex < sidebarItems.length)
@@ -348,6 +376,13 @@ Item {
         context: Qt.WindowShortcut
         onActivated: if (root.service) root.service.focusSearch()
       }
+      // Copy stays available while a text field is focused.
+      Shortcut {
+        sequence: "Ctrl+C"
+        context: Qt.WindowShortcut
+        enabled: !(root.service && root.service.textEditing)
+        onActivated: root.hopToPlaying()
+      }
       Shortcut {
         sequence: "Escape"
         context: Qt.WindowShortcut
@@ -492,6 +527,24 @@ Item {
         anchors.bottom: parent.bottom
         menuWidth: sidebar.width
         service: root.service
+      }
+
+      // Above the pages, but the press is rejected so the control underneath
+      // still receives the click.
+      MouseArea {
+        id: textFocusRelease
+        anchors.fill: parent
+        z: 100
+        enabled: !!(root.service && root.service.textEditing)
+        propagateComposedEvents: true
+        scrollGestureEnabled: false
+        onPressed: function(mouse) {
+          var field = root.editingInput()
+          var keep = root.pointInItem(field, textFocusRelease, mouse.x, mouse.y)
+            || root.pointInItem(field ? field.parent : null, textFocusRelease, mouse.x, mouse.y)
+          mouse.accepted = false
+          if (!keep) Qt.callLater(root.releaseEditing)
+        }
       }
     }
   }

@@ -22,6 +22,7 @@ Column {
         { keys: "Ctrl+M", action: "Mute" },
         { keys: "Ctrl+S", action: "Toggle shuffle" },
         { keys: "Ctrl+F", action: "Open Search and select the query" },
+        { keys: "Ctrl+C", action: "Center the playing song in its list" },
         { keys: "Escape", action: "Close the player" }
       ]
     },
@@ -55,7 +56,7 @@ Column {
     color: Color.muted
     font.pixelSize: 12
     lineHeight: 1.35
-    text: "Playback keys work anywhere in the window. Tab and Shift+Tab move one highlight between the sidebar and the list on the page. Up and Down move one row. In the cover grid, Left and Right move across that row. Page Up and Page Down jump one screen. Ctrl+Home and Ctrl+End jump to the first and last item. Enter opens the highlighted menu page, plays the highlighted track, or opens the highlighted album or artist. With the highlight on this page, Up, Down, Page Up, Page Down, Ctrl+Home, and Ctrl+End scroll this text. While the cursor is in Search or the folder path, the arrow keys edit the text. Tab leaves the field for the list, and Shift+Tab leaves it for the sidebar. The highlight stays where the last key put it."
+    text: "Playback keys work anywhere in the window. Ctrl+C opens the album, artist, or library this queue came from and centers the playing song, from any page. Tab and Shift+Tab move one highlight between the sidebar and the list on the page. Up and Down move one row. In the cover grid, Left and Right move across that row. Page Up and Page Down jump one screen. Ctrl+Home and Ctrl+End jump to the first and last item. Enter opens the highlighted menu page, plays the highlighted track, or opens the highlighted album or artist. With the highlight on this page, Up, Down, Page Up, Page Down, Ctrl+Home, and Ctrl+End scroll this text. While the cursor is in Search or the folder path, the arrow keys edit the text and Ctrl+C copies. Click outside the field to leave it. Tab leaves the field for the list, and Shift+Tab leaves it for the sidebar. The highlight stays where the last key put it."
   }
 
   Repeater {

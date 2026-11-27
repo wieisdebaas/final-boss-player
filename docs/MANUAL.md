@@ -84,7 +84,7 @@ Sidebar:
 | **Albums** | Browse by album |
 | **Settings** | Folders, rescan |
 
-The bottom bar always shows the current track and play / pause / seek / volume. Click the **title** or the **album** name there to return to the list that queue came from — the album, the artist, or the library — scrolled to the playing song. The artist name still opens that artist. Closing the panel does **not** stop playback.
+The bottom bar always shows the current track and play / pause / seek / volume. Click the **title** or the **album** name there, or press `Ctrl+C`, to return to the list that queue came from — the album, the artist, or the library — scrolled to the playing song. That works from any page. The artist name still opens that artist. Closing the panel does **not** stop playback.
 
 ### Keyboard shortcuts (panel open)
 
@@ -102,9 +102,10 @@ Playback works anywhere in the window:
 | `Ctrl+M` | Mute |
 | `Ctrl+S` | Toggle shuffle |
 | `Ctrl+F` | Jump to Search |
+| `Ctrl+C` | Open the playing song’s list and center it |
 | `Esc` | Close the panel |
 
-One highlight sits on the sidebar or on the page list. `Tab` and `Shift+Tab` switch between them. With the highlight on Settings, those list keys scroll the page. In Search or the folder path, the arrow keys edit the text. `Tab` leaves the field for the list, and `Shift+Tab` leaves it for the sidebar. The highlight stays where the last key put it.
+One highlight sits on the sidebar or on the page list. `Tab` and `Shift+Tab` switch between them. With the highlight on Settings, those list keys scroll the page. In Search or the folder path, the arrow keys edit the text and `Ctrl+C` copies. Click outside the field to leave it. `Tab` leaves the field for the list, and `Shift+Tab` leaves it for the sidebar. The highlight stays where the last key put it.
 
 | Key | Action |
 | --- | --- |
