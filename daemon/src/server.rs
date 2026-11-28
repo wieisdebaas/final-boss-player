@@ -167,12 +167,30 @@ pub const PLAYBACK_FILE: &str = "playback.json";
 pub fn load_restore(db_path: &Path, playback_path: &Path) -> Option<Restore> {
     let saved = player::load_playback(playback_path)?;
     let db = crate::db::Db::open(db_path).ok()?;
-    let (tracks, start) = db.queue_for_scope(saved.track_id, &saved.scope).ok()??;
+    let restored = if saved.scope == "search" {
+        db.queue_for_ids(&saved.queue_ids, saved.track_id)
+            .ok()
+            .flatten()
+            .map(|queue| (queue, saved.scope.clone()))
+    } else {
+        None
+    };
+    let ((tracks, start), scope) = match restored {
+        Some(queue) => queue,
+        None => {
+            let scope = if saved.scope == "search" {
+                "album".to_string()
+            } else {
+                saved.scope
+            };
+            (db.queue_for_scope(saved.track_id, &scope).ok()??, scope)
+        }
+    };
     Some(Restore {
         items: tracks.iter().map(queue_item).collect(),
         start,
         position_ms: saved.position_ms,
-        scope: saved.scope,
+        scope,
     })
 }
 
@@ -358,12 +376,18 @@ async fn dispatch(line: &str, context: &ServerContext) -> ServerMessage {
             q,
             limit,
             offset,
-        } => query(request.id, context, kind, q, limit, offset).await,
+            field,
+            genre,
+        } => query(request.id, context, kind, q, limit, offset, field, genre).await,
         Command::GetArt { album_id } => get_art(request.id, context, album_id).await,
         Command::GetArtistArt { artist_id } => get_artist_art(request.id, context, artist_id).await,
         Command::GetGenreArt { name } => get_genre_art(request.id, context, name).await,
         Command::PlayGenre { name } => play_genre(request.id, context, name).await,
-        Command::Play { track_id, scope } => play_track(request.id, context, track_id, scope).await,
+        Command::Play {
+            track_id,
+            scope,
+            track_ids,
+        } => play_track(request.id, context, track_id, scope, track_ids).await,
         Command::PlayAlbum { album_id } => play_album(request.id, context, album_id).await,
         Command::PlayArtist { artist_id } => play_artist(request.id, context, artist_id).await,
         Command::Pause => playback(request.id, context, Cmd::Pause).await,
@@ -394,6 +418,8 @@ async fn query(
     q: String,
     limit: u32,
     offset: u32,
+    field: String,
+    genre: String,
 ) -> ServerMessage {
     let Some(db_path) = context.db_path.clone() else {
         return error_response(id, "unavailable", "library database is not configured");
@@ -405,7 +431,9 @@ async fn query(
             "tracks" => Ok(serde_json::to_value(db.list_tracks(limit, offset)?)?),
             "albums" => Ok(serde_json::to_value(db.list_albums(limit, offset)?)?),
             "artists" => Ok(serde_json::to_value(db.list_artists(limit, offset)?)?),
-            "search" => Ok(serde_json::to_value(db.search(&q, limit, offset)?)?),
+            "search" => Ok(serde_json::to_value(
+                db.search_filtered(&q, &field, &genre, limit, offset)?,
+            )?),
             "home" => Ok(json!({
                 "stats": db.stats()?,
                 "tracks": db.list_recent_tracks(limit, offset)?,
@@ -523,7 +551,14 @@ async fn play_track(
     context: &ServerContext,
     track_id: i64,
     scope: String,
+    track_ids: Vec<i64>,
 ) -> ServerMessage {
+    if scope == "search" {
+        return play_queue(id, context, "search".into(), move |db| {
+            db.queue_for_ids(&track_ids, track_id)
+        })
+        .await;
+    }
     let query_scope = scope.clone();
     play_queue(id, context, scope, move |db| {
         db.queue_for_scope(track_id, &query_scope)

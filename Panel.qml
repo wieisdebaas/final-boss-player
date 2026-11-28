@@ -314,6 +314,15 @@ Item {
         }
       }
 
+      // Enter in the search field highlights the first result. It does not play.
+      Connections {
+        target: searchPage
+        function onResultsCommitted() {
+          root.releaseEditing()
+          root.focusRegion("list")
+        }
+      }
+
       Keys.onPressed: function(event) { root.handleKey(event) }
 
       // Window shortcuts receive ShortcutOverride events before focused text
@@ -377,6 +386,16 @@ Item {
         sequence: "Ctrl+F"
         context: Qt.WindowShortcut
         onActivated: if (root.service) root.service.focusSearch()
+      }
+      Shortcut {
+        sequence: "Ctrl+L"
+        context: Qt.WindowShortcut
+        onActivated: if (root.service) root.service.tiles = false
+      }
+      Shortcut {
+        sequence: "Ctrl+T"
+        context: Qt.WindowShortcut
+        onActivated: if (root.service) root.service.tiles = true
       }
       // Copy stays available while a text field is focused.
       Shortcut {

@@ -407,6 +407,7 @@ fn playback_persistence_round_trips_and_ignores_garbage() {
         track_id: 12,
         position_ms: 34_500,
         scope: String::new(),
+        queue_ids: Vec::new(),
     };
     player::save_playback(&path, &saved).unwrap();
     assert_eq!(player::load_playback(&path), Some(saved));

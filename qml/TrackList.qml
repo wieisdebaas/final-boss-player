@@ -3,9 +3,10 @@ import QtQuick
 import QtQuick.Controls
 import qs.Commons
 import "listkeys.js" as ListKeys
+import "ink.js" as Ink
 
 // Reusable track rows, or cover tiles when the service is in tiles mode.
-// Row / title click plays/toggles; artist and album links only activate
+// Row / title click plays/toggles; artist, album, and genre links only activate
 // when the pointer is over their text. A tile click plays the track.
 Item {
   id: root
@@ -16,7 +17,7 @@ Item {
   property bool showNumbers: true
   // Small album cover on each row. Tiles always show art.
   property bool covers: false
-  // Queue built when a row is played: "album", "artist", or "library".
+  // Queue built when a row is played: "album", "artist", "library", "genre", or "search".
   property string queueScope: "album"
   // Which footer jump this list answers: "albums", "artists", or "library".
   property string revealPage: ""
@@ -35,13 +36,22 @@ Item {
   }
 
   function playTrack(track) {
-    if (service) service.playOrToggle(Number(track.id), queueScope, null)
+    if (!service) return
+    if (queueScope === "search") {
+      var ids = []
+      var rows = tracks || []
+      for (var i = 0; i < rows.length; ++i) ids.push(Number(rows[i].id))
+      service.playList(Number(track.id), ids, null)
+      return
+    }
+    service.playOrToggle(Number(track.id), queueScope, null)
   }
 
   property int keyboardIndex: -1
   property bool keyboardFocused: false
   readonly property int keyboardCount: Array.isArray(tracks) ? tracks.length : 0
   readonly property int rowHeight: covers ? 52 : 44
+  readonly property color metaColor: Ink.secondary(Color.foreground, Color.background)
   readonly property int keyboardStride: tiled ? cellHeight : rowHeight
 
   function publishKeyboard() {
@@ -171,6 +181,7 @@ Item {
       && modelData.artist_id !== null)
     readonly property bool hasAlbum: !!(modelData.album && modelData.album_id !== undefined
       && modelData.album_id !== null)
+    readonly property bool hasGenre: !!(modelData.genre && String(modelData.genre).trim() !== "")
 
     property string artPath: ""
     property int artAlbumId: -1
@@ -206,15 +217,14 @@ Item {
         ? Qt.rgba(Color.foreground.r, Color.foreground.g, Color.foreground.b, 0.08)
         : "transparent")
 
-    // Whole-row click plays the title. Artist/album only steal events when
-    // the pointer is over their actual text (not the empty remainder of the row).
+    // Whole-row click plays the title. Artist, album, and genre only steal
+    // events when the pointer is over their actual text.
     MouseArea {
       id: rowArea
       anchors.fill: parent
       hoverEnabled: true
       cursorShape: Qt.PointingHandCursor
-      onClicked: if (root.service)
-        root.service.playOrToggle(Number(row.modelData.id), root.queueScope, null)
+      onClicked: root.playTrack(row.modelData)
     }
 
     Row {
@@ -290,15 +300,23 @@ Item {
           id: byline
           spacing: 0
           width: parent.width
+          // Each visible name gets an equal share, and only as wide as its text,
+          // so a long artist does not hide the album or the genre.
+          readonly property int pieceCount: (artistLink.visible ? 1 : 0)
+            + (albumLink.visible ? 1 : 0) + (genreLink.visible ? 1 : 0)
+          readonly property int sepBudget: (artistSep.visible ? artistSep.implicitWidth : 0)
+            + (albumSep.visible ? albumSep.implicitWidth : 0)
+          readonly property int pieceWidth: pieceCount > 0
+            ? Math.max(0, (width - sepBudget) / pieceCount) : 0
 
           Text {
             id: artistLink
             elide: Text.ElideRight
             maximumLineCount: 1
-            // Hit box = painted text only (capped so long names don't crush album).
-            width: Math.min(implicitWidth, byline.width * 0.5)
-            color: artistArea.containsMouse ? Color.accent : Color.muted
-            font.pixelSize: 11
+            width: Math.min(implicitWidth, byline.pieceWidth)
+            color: artistArea.containsMouse ? Color.accent : root.metaColor
+            font.pixelSize: 12
+            font.weight: Font.Medium
             font.underline: artistArea.containsMouse
             text: String(row.modelData.artist || "")
             visible: text !== ""
@@ -313,24 +331,21 @@ Item {
           }
 
           Text {
-            id: bylineSep
-            color: Color.muted
-            font.pixelSize: 11
+            id: artistSep
+            color: root.metaColor
+            font.pixelSize: 12
             text: " \u00B7 "
-            visible: artistLink.visible && albumLink.visible
+            visible: artistLink.visible && (albumLink.visible || genreLink.visible)
           }
 
           Text {
             id: albumLink
             elide: Text.ElideRight
             maximumLineCount: 1
-            // Same as artist: only as wide as the label, not the rest of the row.
-            width: Math.min(
-              implicitWidth,
-              Math.max(0, byline.width - artistLink.width
-                - (bylineSep.visible ? bylineSep.width : 0)))
-            color: albumArea.containsMouse ? Color.accent : Color.muted
-            font.pixelSize: 11
+            width: Math.min(implicitWidth, byline.pieceWidth)
+            color: albumArea.containsMouse ? Color.accent : root.metaColor
+            font.pixelSize: 12
+            font.weight: Font.Medium
             font.underline: albumArea.containsMouse
             text: String(row.modelData.album || "")
             visible: text !== ""
@@ -343,6 +358,35 @@ Item {
               onClicked: if (root.service) root.service.openAlbumFromTrack(row.modelData)
             }
           }
+
+          Text {
+            id: albumSep
+            color: root.metaColor
+            font.pixelSize: 12
+            text: " \u00B7 "
+            visible: albumLink.visible && genreLink.visible
+          }
+
+          Text {
+            id: genreLink
+            elide: Text.ElideRight
+            maximumLineCount: 1
+            width: Math.min(implicitWidth, byline.pieceWidth)
+            color: genreArea.containsMouse ? Color.accent : root.metaColor
+            font.pixelSize: 12
+            font.weight: Font.Medium
+            font.underline: genreArea.containsMouse
+            text: String(row.modelData.genre || "")
+            visible: text !== ""
+            MouseArea {
+              id: genreArea
+              anchors.fill: parent
+              hoverEnabled: true
+              cursorShape: row.hasGenre ? Qt.PointingHandCursor : Qt.ArrowCursor
+              enabled: row.hasGenre
+              onClicked: if (root.service) root.service.openGenreFromTrack(row.modelData)
+            }
+          }
         }
       }
 
@@ -350,7 +394,7 @@ Item {
         width: 60
         anchors.verticalCenter: parent.verticalCenter
         horizontalAlignment: Text.AlignRight
-        color: Color.muted
+        color: root.metaColor
         font.pixelSize: 12
         text: root.formatDuration(row.modelData.duration_ms)
       }
@@ -492,9 +536,10 @@ Item {
           anchors.left: titleText.left
           anchors.right: titleText.right
           elide: Text.ElideRight
-          color: Color.muted
-          font.pixelSize: 11
-          text: [tile.modelData.artist, tile.modelData.album]
+          color: root.metaColor
+          font.pixelSize: 12
+          font.weight: Font.Medium
+          text: [tile.modelData.artist, tile.modelData.album, tile.modelData.genre]
             .filter(function(part) { return !!part }).join(" \u00B7 ")
         }
 

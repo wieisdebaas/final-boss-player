@@ -86,6 +86,36 @@ fn set_update_metadata_json_line_round_trips() {
 }
 
 #[test]
+fn play_without_ids_still_parses_and_search_ids_round_trip() {
+    let album = r#"{"v":1,"id":4,"cmd":"play","track_id":9,"scope":"album"}"#;
+    let parsed: ClientMessage = serde_json::from_str(album).unwrap();
+    assert_eq!(
+        parsed.cmd,
+        Command::Play {
+            track_id: 9,
+            scope: "album".into(),
+            track_ids: Vec::new(),
+        }
+    );
+
+    let line = r#"{"v":1,"id":5,"cmd":"play","track_id":2,"scope":"search","track_ids":[2,8,1]}"#;
+    let message: ClientMessage = serde_json::from_str(line).unwrap();
+    assert_eq!(
+        message,
+        ClientMessage {
+            v: 1,
+            id: 5,
+            cmd: Command::Play {
+                track_id: 2,
+                scope: "search".into(),
+                track_ids: vec![2, 8, 1],
+            },
+        }
+    );
+    assert_eq!(serde_json::to_string(&message).unwrap(), line);
+}
+
+#[test]
 fn play_genre_json_line_round_trips() {
     let line = r#"{"v":1,"id":14,"cmd":"play_genre","name":"Jazz"}"#;
 

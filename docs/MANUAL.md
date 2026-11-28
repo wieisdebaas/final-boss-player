@@ -78,14 +78,14 @@ Sidebar:
 | Page | What it does |
 | --- | --- |
 | **Home** | Tracks added most recently |
-| **Search** | Local search (no internet) |
+| **Search** | Local search. Match chooses title, artist, album, or genre. The genre menu limits results to a parent family such as Hip-Hop. Playing a result plays that result list |
 | **Library** | All tracks |
 | **Artists** | Browse by artist |
 | **Albums** | Browse by album |
 | **Genres** | Browse by genre, as a list or as tiles |
 | **Settings** | Folders, rescan, metadata lookup |
 
-The bottom bar always shows the current track and play / pause / seek / volume. Click the **title** or the **album** name there, or press `Ctrl+C`, to return to the list that queue came from — the album, the artist, the genre, or the library — scrolled to the playing song. That works from any page. The artist name still opens that artist. Closing the panel does **not** stop playback.
+The bottom bar always shows the current track and play / pause / seek / volume. Click the **title**, or press `Ctrl+C`, to return to the list that queue came from — the album, the artist, the genre, or the library — scrolled to the playing song. That works from any page. The album name opens that album, the artist name opens that artist, and the genre name opens that genre. Closing the panel does **not** stop playback.
 
 ### Keyboard shortcuts (panel open)
 
@@ -103,10 +103,12 @@ Playback works anywhere in the window:
 | `Ctrl+M` | Mute |
 | `Ctrl+S` | Toggle shuffle |
 | `Ctrl+F` | Jump to Search |
+| `Ctrl+L` | List view |
+| `Ctrl+T` | Tiles view |
 | `Ctrl+C` | Open the playing song’s list and center it |
 | `Esc` | Close the panel |
 
-One highlight sits on the sidebar or on the page list. `Tab` and `Shift+Tab` switch between them. With the highlight on Settings, those list keys scroll the page. In Search or the folder path, the arrow keys edit the text and `Ctrl+C` copies. Click outside the field to leave it. `Tab` leaves the field for the list, and `Shift+Tab` leaves it for the sidebar. The highlight stays where the last key put it.
+One highlight sits on the sidebar or on the page list. `Tab` and `Shift+Tab` switch between them. With the highlight on Settings, those list keys scroll the page. In Search or the folder path, the arrow keys edit the text and `Ctrl+C` copies. Click outside the field to leave it. `Tab` leaves the field for the list, and `Shift+Tab` leaves it for the sidebar. `Enter` in the search field highlights the first result and does not play it; `Enter` on that result plays it. `Space` still pauses or resumes the song that is already playing. The highlight stays where the last key put it.
 
 | Key | Action |
 | --- | --- |

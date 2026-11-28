@@ -2,6 +2,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import qs.Commons
 import qs.Ui
+import "ink.js" as Ink
 
 // Bottom transport bar. Pure view over Service.playerState.
 Rectangle {
@@ -21,6 +22,7 @@ Rectangle {
     ? Math.max(0, Math.min(1, positionMs / durationMs)) : 0
   readonly property real volume: snapshot ? Math.max(0, Math.min(1, Number(snapshot.volume))) : 0
   readonly property var trackInfo: service ? service.track : null
+  readonly property color metaColor: Ink.secondary(Color.foreground, Color.background)
   readonly property int albumId: trackInfo && trackInfo.album_id !== undefined && trackInfo.album_id !== null
     ? Number(trackInfo.album_id) : -1
   readonly property bool trackHasArt: !!trackInfo && trackInfo.has_art === true && albumId >= 0
@@ -165,17 +167,27 @@ Rectangle {
           ? String(root.trackInfo.artist) : ""
         readonly property string albumName: root.trackInfo && root.trackInfo.album
           ? String(root.trackInfo.album) : ""
+        readonly property string genreName: root.trackInfo && root.trackInfo.genre
+          ? String(root.trackInfo.genre) : ""
         readonly property bool hasArtist: !!(root.trackInfo && root.trackInfo.artist_id !== undefined
           && root.trackInfo.artist_id !== null && artistName !== "")
         readonly property bool hasAlbum: !!(root.trackInfo && root.trackInfo.album_id !== undefined
           && root.trackInfo.album_id !== null && albumName !== "")
+        readonly property bool hasGenre: genreName.trim() !== ""
+        readonly property int pieceCount: (footerArtist.visible ? 1 : 0)
+          + (footerAlbum.visible ? 1 : 0) + (footerGenre.visible ? 1 : 0)
+        readonly property int sepBudget: (footerArtistSep.visible ? footerArtistSep.implicitWidth : 0)
+          + (footerAlbumSep.visible ? footerAlbumSep.implicitWidth : 0)
+        readonly property int pieceWidth: pieceCount > 0
+          ? Math.max(0, (width - sepBudget) / pieceCount) : 0
 
         Text {
           id: footerArtist
           elide: Text.ElideRight
-          width: Math.min(implicitWidth, footerByline.width * 0.5)
-          color: footerArtistArea.containsMouse ? Color.accent : Color.muted
+          width: Math.min(implicitWidth, footerByline.pieceWidth)
+          color: footerArtistArea.containsMouse ? Color.accent : root.metaColor
           font.pixelSize: 12
+          font.weight: Font.Medium
           font.underline: footerArtistArea.containsMouse
           text: footerByline.artistName
           visible: text !== ""
@@ -189,22 +201,19 @@ Rectangle {
           }
         }
         Text {
-          id: footerSep
-          color: Color.muted
+          id: footerArtistSep
+          color: root.metaColor
           font.pixelSize: 12
           text: " \u00B7 "
-          visible: footerArtist.visible && footerAlbum.visible
+          visible: footerArtist.visible && (footerAlbum.visible || footerGenre.visible)
         }
         Text {
           id: footerAlbum
           elide: Text.ElideRight
-          // Text-sized hit box only — do not stretch across leftover row width.
-          width: Math.min(
-            implicitWidth,
-            Math.max(0, footerByline.width - footerArtist.width
-              - (footerSep.visible ? footerSep.width : 0)))
-          color: footerAlbumArea.containsMouse ? Color.accent : Color.muted
+          width: Math.min(implicitWidth, footerByline.pieceWidth)
+          color: footerAlbumArea.containsMouse ? Color.accent : root.metaColor
           font.pixelSize: 12
+          font.weight: Font.Medium
           font.underline: footerAlbumArea.containsMouse
           text: footerByline.albumName
           visible: text !== ""
@@ -214,7 +223,33 @@ Rectangle {
             hoverEnabled: true
             cursorShape: footerByline.hasAlbum ? Qt.PointingHandCursor : Qt.ArrowCursor
             enabled: footerByline.hasAlbum
-            onClicked: if (root.service) root.service.openPlayingContext()
+            onClicked: if (root.service) root.service.openAlbumFromTrack(root.trackInfo)
+          }
+        }
+        Text {
+          id: footerAlbumSep
+          color: root.metaColor
+          font.pixelSize: 12
+          text: " \u00B7 "
+          visible: footerAlbum.visible && footerGenre.visible
+        }
+        Text {
+          id: footerGenre
+          elide: Text.ElideRight
+          width: Math.min(implicitWidth, footerByline.pieceWidth)
+          color: footerGenreArea.containsMouse ? Color.accent : root.metaColor
+          font.pixelSize: 12
+          font.weight: Font.Medium
+          font.underline: footerGenreArea.containsMouse
+          text: footerByline.genreName
+          visible: text !== ""
+          MouseArea {
+            id: footerGenreArea
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: footerByline.hasGenre ? Qt.PointingHandCursor : Qt.ArrowCursor
+            enabled: footerByline.hasGenre
+            onClicked: if (root.service) root.service.openGenreFromTrack(root.trackInfo)
           }
         }
       }

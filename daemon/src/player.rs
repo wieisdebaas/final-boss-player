@@ -153,6 +153,11 @@ impl Queue {
         true
     }
 
+    /// Original insert order, not the shuffled play order.
+    pub fn source_ids(&self) -> Vec<i64> {
+        self.items.iter().map(|item| item.id).collect()
+    }
+
     pub fn current(&self) -> Option<&QueueItem> {
         self.order.get(self.pos).map(|&index| &self.items[index])
     }
@@ -459,6 +464,15 @@ impl Engine {
         self.queue.current().map(|item| item.id)
     }
 
+    /// Ids to restore a search queue. Empty for album, artist, genre, and library.
+    pub fn queue_ids(&self) -> Vec<i64> {
+        if self.queue_scope == "search" {
+            self.queue.source_ids()
+        } else {
+            Vec::new()
+        }
+    }
+
     pub fn view(&self) -> PlaybackUpdate {
         let current = self.queue.current();
         let position_ms = if self.loaded {
@@ -761,9 +775,12 @@ enum Direction {
 pub struct SavedPlayback {
     pub track_id: i64,
     pub position_ms: u64,
-    /// "album", "artist", or "library". Missing in older files, which means album.
+    /// "album", "artist", "library", "genre", or "search". Missing means album.
     #[serde(default)]
     pub scope: String,
+    /// Search-result order. Empty unless `scope` is "search".
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub queue_ids: Vec<i64>,
 }
 
 /// Atomically writes the last track and position.
@@ -1006,6 +1023,7 @@ impl Mirror {
             track_id,
             position_ms: engine.view().position_ms,
             scope: engine.queue_scope().to_string(),
+            queue_ids: engine.queue_ids(),
         };
         if let Err(error) = save_playback(path, &saved) {
             tracing::warn!(%error, "could not persist playback position");

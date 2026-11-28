@@ -157,6 +157,9 @@ Item {
     } else if (scope === "genre") {
       page = "genres"
       opened = openGenreFromTrack(track)
+    } else if (scope === "search") {
+      page = "search"
+      opened = navigate("search")
     } else {
       opened = openAlbumFromTrack(track)
     }
@@ -229,6 +232,18 @@ Item {
     }, callback)
   }
 
+  // field is all, title, artist, album, or genre. genre is a parent family id.
+  function querySearch(q, field, genre, limit, offset, callback) {
+    return request("query", {
+      kind: "search",
+      q: String(q || ""),
+      field: String(field || "all"),
+      genre: String(genre || ""),
+      limit: limit === undefined ? 100 : limit,
+      offset: offset === undefined ? 0 : offset
+    }, callback)
+  }
+
   // The daemon caps each query at 500 rows. Keep asking until a short page.
   function queryPages(kind, q, callback) {
     var pageLimit = 500
@@ -251,7 +266,7 @@ Item {
     take(0)
   }
 
-  // scope is "album", "artist", or "library": the queue shuffle and next walk.
+  // scope is "album", "artist", "library", "genre", or "search".
   function play(trackId, scope, callback) {
     return request("play", {
       track_id: trackId,
@@ -267,6 +282,22 @@ Item {
       return true
     }
     return play(id, scope, callback)
+  }
+  // Plays `trackId` inside the search results, in that order. The same song
+  // already playing from a search queue toggles pause.
+  function playList(trackId, trackIds, callback) {
+    var id = Number(trackId)
+    var scope = playerState && playerState.scope ? String(playerState.scope) : ""
+    if (track && Number(track.id) === id && scope === "search") {
+      toggle()
+      if (typeof callback === "function") callback(true, null, null)
+      return true
+    }
+    return request("play", {
+      track_id: id,
+      scope: "search",
+      track_ids: trackIds || []
+    }, callback)
   }
   function playAlbum(albumId, callback) {
     return request("play_album", { album_id: albumId }, callback)

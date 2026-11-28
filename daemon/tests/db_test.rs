@@ -122,6 +122,91 @@ fn comma_separated_terms_must_all_match() {
 }
 
 #[test]
+fn search_matches_genre() {
+    let temp = tempdir().unwrap();
+    let db = Db::open(temp.path().join("library.sqlite")).unwrap();
+    let folder_id = db.upsert_folder("/music", None).unwrap();
+
+    db.upsert_track(&track(folder_id, "/music/boss.flac", "Boss Theme"))
+        .unwrap();
+
+    let mut other = track(folder_id, "/music/other.flac", "Other");
+    other.genre = Some("Jazz".into());
+    db.upsert_track(&other).unwrap();
+
+    let matches = db.search("soundtrack", 20, 0).unwrap();
+    assert_eq!(matches.len(), 1);
+    assert_eq!(matches[0].title, "Boss Theme");
+
+    let both = db.search("final form, game soundtrack", 20, 0).unwrap();
+    assert_eq!(both.len(), 1);
+    assert_eq!(both[0].title, "Boss Theme");
+}
+
+#[test]
+fn search_rap_includes_the_hip_hop_family_unless_limited_to_titles() {
+    let temp = tempdir().unwrap();
+    let db = Db::open(temp.path().join("library.sqlite")).unwrap();
+    let folder_id = db.upsert_folder("/music", None).unwrap();
+
+    let mut hip_hop = track(folder_id, "/music/hh.flac", "Plain Song");
+    hip_hop.genre = Some("hip hop".into());
+    db.upsert_track(&hip_hop).unwrap();
+
+    let mut gangsta = track(folder_id, "/music/gg.flac", "Street Song");
+    gangsta.genre = Some("gangsta rap".into());
+    db.upsert_track(&gangsta).unwrap();
+
+    let mut titled = track(folder_id, "/music/title.flac", "Rap Battle");
+    titled.genre = Some("jazz".into());
+    db.upsert_track(&titled).unwrap();
+
+    let family = db.search_filtered("rap", "all", "", 20, 0).unwrap();
+    let titles: Vec<_> = family.iter().map(|track| track.title.as_str()).collect();
+    assert!(titles.contains(&"Plain Song"));
+    assert!(titles.contains(&"Street Song"));
+    assert!(titles.contains(&"Rap Battle"));
+
+    let titles_only = db.search_filtered("rap", "title", "", 20, 0).unwrap();
+    assert_eq!(titles_only.len(), 1);
+    assert_eq!(titles_only[0].title, "Rap Battle");
+
+    let specific = db.search_filtered("gangsta rap", "all", "", 20, 0).unwrap();
+    assert_eq!(specific.len(), 1);
+    assert_eq!(specific[0].title, "Street Song");
+
+    let menu = db.search_filtered("", "all", "hip hop", 20, 0).unwrap();
+    let menu_titles: Vec<_> = menu.iter().map(|track| track.title.as_str()).collect();
+    assert!(menu_titles.contains(&"Plain Song"));
+    assert!(menu_titles.contains(&"Street Song"));
+    assert!(!menu_titles.contains(&"Rap Battle"));
+}
+
+#[test]
+fn search_reports_a_downloaded_cover_as_art() {
+    let temp = tempdir().unwrap();
+    let db = Db::open(temp.path().join("library.sqlite")).unwrap();
+    let folder_id = db.upsert_folder("/music", None).unwrap();
+
+    let mut bare = track(folder_id, "/music/bare.flac", "Bare Song");
+    bare.has_art = false;
+    db.upsert_track(&bare).unwrap();
+
+    let before = db.search("bare song", 20, 0).unwrap();
+    assert_eq!(before.len(), 1);
+    assert!(!before[0].has_art);
+
+    db.mark_album_cover(before[0].album_id.expect("album"))
+        .unwrap();
+    let after = db.search("bare song", 20, 0).unwrap();
+    assert!(after[0].has_art);
+    let listed = db.list_tracks(20, 0).unwrap();
+    assert!(listed
+        .iter()
+        .any(|track| track.title == "Bare Song" && track.has_art));
+}
+
+#[test]
 fn creates_version_one_schema_and_lists_upserted_folders() {
     let temp = tempdir().unwrap();
     let db = Db::open(temp.path().join("library.sqlite")).unwrap();
@@ -406,6 +491,47 @@ fn scoped(
 fn titles(queue: Option<(Vec<db::Track>, usize)>) -> (Vec<String>, usize) {
     let (tracks, index) = queue.expect("queue");
     (tracks.into_iter().map(|track| track.title).collect(), index)
+}
+
+#[test]
+fn search_queue_keeps_the_result_order() {
+    let temp = tempdir().unwrap();
+    let db = Db::open(temp.path().join("library.sqlite")).unwrap();
+    let folder_id = db.upsert_folder("/music", None).unwrap();
+    let alpha = db
+        .upsert_track(&scoped(
+            folder_id,
+            "/music/a.flac",
+            "Alpha",
+            "Ada",
+            "One",
+            1,
+        ))
+        .unwrap();
+    let beta = db
+        .upsert_track(&scoped(folder_id, "/music/b.flac", "Beta", "Bea", "Two", 1))
+        .unwrap();
+    let gamma = db
+        .upsert_track(&scoped(
+            folder_id,
+            "/music/c.flac",
+            "Gamma",
+            "Ada",
+            "One",
+            2,
+        ))
+        .unwrap();
+
+    assert_eq!(
+        titles(db.queue_for_ids(&[gamma, alpha, beta], gamma).unwrap()),
+        (vec!["Gamma".into(), "Alpha".into(), "Beta".into()], 0)
+    );
+    assert_eq!(
+        titles(db.queue_for_ids(&[9999, beta, alpha], beta).unwrap()),
+        (vec!["Beta".into(), "Alpha".into()], 0)
+    );
+    assert!(db.queue_for_ids(&[alpha], beta).unwrap().is_none());
+    assert!(db.queue_for_ids(&[], alpha).unwrap().is_none());
 }
 
 #[test]

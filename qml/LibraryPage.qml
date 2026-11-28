@@ -80,6 +80,7 @@ Item {
     tracks: root.tracks
     queueScope: "library"
     revealPage: "library"
+    covers: true
     emptyText: root.errorText !== "" ? root.errorText : "No tracks yet"
   }
 

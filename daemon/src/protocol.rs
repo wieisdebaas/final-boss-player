@@ -34,12 +34,21 @@ pub enum Command {
         limit: u32,
         #[serde(default)]
         offset: u32,
+        /// all, title, artist, album, or genre. Empty means all.
+        #[serde(default)]
+        field: String,
+        /// Parent genre family, or empty for every genre.
+        #[serde(default)]
+        genre: String,
     },
     Play {
         track_id: i64,
-        /// "album", "artist", or "library". Omitted means the track's album.
+        /// "album", "artist", "library", "genre", or "search". Omitted means the track's album.
         #[serde(default)]
         scope: String,
+        /// Result order when `scope` is "search". Empty for every other scope.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        track_ids: Vec<i64>,
     },
     PlayAlbum {
         album_id: i64,

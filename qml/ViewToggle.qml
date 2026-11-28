@@ -74,7 +74,7 @@ Row {
 
       ToolTip.visible: area.containsMouse
       ToolTip.delay: 400
-      ToolTip.text: button.modelData.listMark ? "List" : "Tiles"
+      ToolTip.text: button.modelData.listMark ? "List  Ctrl+L" : "Tiles  Ctrl+T"
 
       MouseArea {
         id: area

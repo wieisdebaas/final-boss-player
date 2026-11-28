@@ -4,6 +4,10 @@ use std::path::Path;
 use rusqlite::{ffi, params, params_from_iter, Connection, Result, TransactionBehavior};
 use serde::Serialize;
 
+mod genre_families {
+    include!("genres.rs");
+}
+
 const SUPPORTED_SCHEMA_VERSION: i64 = 2;
 const VERSION_ONE_SCHEMA: &str = "
     CREATE TABLE folders (
@@ -454,44 +458,64 @@ impl Db {
     }
 
     pub fn search(&self, query: &str, limit: u32, offset: u32) -> Result<Vec<Track>> {
-        // Commas split the query. Every term must match somewhere on the track,
-        // so "eminem, the slim shady lp" is that artist and that album.
+        self.search_filtered(query, "all", "", limit, offset)
+    }
+
+    /// `field` is all, title, artist, album, or genre. `genre` is a parent
+    /// family such as "hip hop", or empty. A family name in the words includes
+    /// every genre in that family. A specific genre does not.
+    pub fn search_filtered(
+        &self,
+        query: &str,
+        field: &str,
+        genre: &str,
+        limit: u32,
+        offset: u32,
+    ) -> Result<Vec<Track>> {
+        let field = match field {
+            "title" | "artist" | "album" | "genre" => field,
+            _ => "all",
+        };
         let terms: Vec<&str> = query
             .split(',')
             .map(str::trim)
             .filter(|term| !term.is_empty())
             .take(8)
             .collect();
-        let patterns: Vec<String> = terms.iter().map(|term| format!("%{term}%")).collect();
-        let mut sql = String::from(
-            "SELECT id, folder_id, path, size, mtime, title, artist, album_artist,
-                    album, track_no, disc_no, year, genre, duration_ms, has_art, added_at,
-                    album_id, artist_id
-             FROM tracks",
-        );
-        for index in 0..patterns.len() {
-            let clause = format!(
-                "(title LIKE ?{0} OR artist LIKE ?{0} OR album_artist LIKE ?{0} OR album LIKE ?{0})",
-                index + 1
-            );
-            if index == 0 {
-                sql.push_str(" WHERE ");
-            } else {
-                sql.push_str(" AND ");
-            }
-            sql.push_str(&clause);
+        let mut binds: Vec<String> = Vec::new();
+        let mut clauses: Vec<String> = Vec::new();
+        for term in terms {
+            clauses.push(term_clause(field, term, &mut binds));
         }
-        let limit_at = patterns.len() + 1;
-        let offset_at = patterns.len() + 2;
+        if let Some(members) = genre_families::family_members(genre) {
+            clauses.push(genre_equals(members, &mut binds));
+        } else if !genre.trim().is_empty() {
+            return Ok(Vec::new());
+        }
+        let mut sql = String::from(
+            "SELECT t.id, t.folder_id, t.path, t.size, t.mtime, t.title, t.artist, t.album_artist,
+                    t.album, t.track_no, t.disc_no, t.year, t.genre, t.duration_ms,
+                    CASE WHEN t.has_art = 1 OR IFNULL(a.has_cover, 0) = 1 THEN 1 ELSE 0 END,
+                    t.added_at, t.album_id, t.artist_id
+             FROM tracks t
+             LEFT JOIN albums a ON a.id = t.album_id",
+        );
+        if !clauses.is_empty() {
+            sql.push_str(" WHERE ");
+            sql.push_str(&clauses.join(" AND "));
+        }
+        let limit_at = binds.len() + 1;
+        let offset_at = binds.len() + 2;
         sql.push_str(&format!(
-            " ORDER BY title COLLATE NOCASE, id LIMIT ?{limit_at} OFFSET ?{offset_at}"
+            " ORDER BY t.title COLLATE NOCASE, t.id LIMIT ?{limit_at} OFFSET ?{offset_at}"
         ));
         let mut statement = self.connection.prepare(&sql)?;
-        let mut binds: Vec<&dyn rusqlite::types::ToSql> = patterns.iter().map(|p| p as _).collect();
-        binds.push(&limit);
-        binds.push(&offset);
+        let mut bound: Vec<&dyn rusqlite::types::ToSql> =
+            binds.iter().map(|value| value as _).collect();
+        bound.push(&limit);
+        bound.push(&offset);
         let tracks = statement
-            .query_map(params_from_iter(binds), map_track)?
+            .query_map(params_from_iter(bound), map_track)?
             .collect();
         tracks
     }
@@ -515,11 +539,13 @@ impl Db {
 
     pub fn list_tracks(&self, limit: u32, offset: u32) -> Result<Vec<Track>> {
         let mut statement = self.connection.prepare(
-            "SELECT id, folder_id, path, size, mtime, title, artist, album_artist,
-                    album, track_no, disc_no, year, genre, duration_ms, has_art, added_at,
-                    album_id, artist_id
-             FROM tracks
-             ORDER BY title COLLATE NOCASE, id
+            "SELECT t.id, t.folder_id, t.path, t.size, t.mtime, t.title, t.artist, t.album_artist,
+                    t.album, t.track_no, t.disc_no, t.year, t.genre, t.duration_ms,
+                    CASE WHEN t.has_art = 1 OR IFNULL(a.has_cover, 0) = 1 THEN 1 ELSE 0 END,
+                    t.added_at, t.album_id, t.artist_id
+             FROM tracks t
+             LEFT JOIN albums a ON a.id = t.album_id
+             ORDER BY t.title COLLATE NOCASE, t.id
              LIMIT ?1 OFFSET ?2",
         )?;
         let tracks = statement
@@ -884,6 +910,29 @@ impl Db {
         Ok(filled)
     }
 
+    /// Search results, in the order they were shown. Missing ids are skipped.
+    /// `None` when `track_id` is not among the tracks that remain.
+    pub fn queue_for_ids(&self, ids: &[i64], track_id: i64) -> Result<Option<(Vec<Track>, usize)>> {
+        if ids.is_empty() {
+            return Ok(None);
+        }
+        let mut statement = self.connection.prepare(
+            "SELECT id, folder_id, path, size, mtime, title, artist, album_artist,
+                    album, track_no, disc_no, year, genre, duration_ms, has_art, added_at,
+                    album_id, artist_id
+             FROM tracks WHERE id = ?1",
+        )?;
+        let mut tracks = Vec::new();
+        for id in ids {
+            match statement.query_row([id], map_track) {
+                Ok(track) => tracks.push(track),
+                Err(rusqlite::Error::QueryReturnedNoRows) => {}
+                Err(error) => return Err(error),
+            }
+        }
+        Ok(queue_index(tracks, track_id))
+    }
+
     /// Play queue for `scope`.
     ///
     /// `"library"` is every track in library order. `"artist"` is every track
@@ -1055,6 +1104,42 @@ impl Db {
 fn queue_index(tracks: Vec<Track>, track_id: i64) -> Option<(Vec<Track>, usize)> {
     let index = tracks.iter().position(|track| track.id == track_id)?;
     Some((tracks, index))
+}
+
+fn push_bind(binds: &mut Vec<String>, value: String) -> usize {
+    binds.push(value);
+    binds.len()
+}
+
+fn genre_equals(members: &[&str], binds: &mut Vec<String>) -> String {
+    let parts: Vec<String> = members
+        .iter()
+        .map(|member| {
+            let index = push_bind(binds, (*member).to_string());
+            format!("t.genre = ?{index} COLLATE NOCASE")
+        })
+        .collect();
+    format!("({})", parts.join(" OR "))
+}
+
+fn term_clause(field: &str, term: &str, binds: &mut Vec<String>) -> String {
+    let like = push_bind(binds, format!("%{term}%"));
+    let text = match field {
+        "title" => format!("t.title LIKE ?{like}"),
+        "artist" => format!("(t.artist LIKE ?{like} OR t.album_artist LIKE ?{like})"),
+        "album" => format!("t.album LIKE ?{like}"),
+        "genre" => format!("t.genre LIKE ?{like}"),
+        _ => format!(
+            "(t.title LIKE ?{like} OR t.artist LIKE ?{like} OR t.album_artist LIKE ?{like} OR t.album LIKE ?{like} OR t.genre LIKE ?{like})"
+        ),
+    };
+    if matches!(field, "all" | "genre") {
+        if let Some(members) = genre_families::expand_term(term) {
+            let family = genre_equals(members, binds);
+            return format!("({text} OR {family})");
+        }
+    }
+    text
 }
 
 fn map_track(row: &rusqlite::Row<'_>) -> Result<Track> {

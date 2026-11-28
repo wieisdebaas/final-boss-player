@@ -3,6 +3,7 @@ import QtQuick
 import QtQuick.Controls
 import qs.Commons
 import "listkeys.js" as ListKeys
+import "ink.js" as Ink
 
 // Album and artist rows, or a cover grid when the service is in tiles mode.
 // `secondaryOf` builds the subtitle. Emits activated(item) on click and
@@ -31,6 +32,7 @@ Item {
   property bool keyboardFocused: false
   readonly property int keyboardCount: Array.isArray(items) ? items.length : 0
   readonly property int keyboardStride: tiled ? cellHeight : 52
+  readonly property color metaColor: Ink.secondary(Color.foreground, Color.background)
 
   function publishKeyboard() {
     if (keyboardIndex >= keyboardCount)
@@ -227,8 +229,9 @@ Item {
         Text {
           width: parent.width
           elide: Text.ElideRight
-          color: Color.muted
-          font.pixelSize: 11
+          color: root.metaColor
+          font.pixelSize: 12
+          font.weight: Font.Medium
           text: root.secondaryOf(row.modelData)
         }
       }
@@ -351,8 +354,9 @@ Item {
           Text {
             width: parent.width
             elide: Text.ElideRight
-            color: Color.muted
-            font.pixelSize: 11
+            color: root.metaColor
+            font.pixelSize: 12
+            font.weight: Font.Medium
             text: root.secondaryOf(tile.modelData)
           }
         }
