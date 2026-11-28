@@ -3,6 +3,7 @@ import QtQuick
 import QtQuick.Controls
 import Quickshell
 import qs.Commons
+import "ink.js" as Ink
 
 // Music folders: add (starts a scan), remove, rescan.
 Item {
@@ -112,7 +113,7 @@ Item {
         height: viewToggle.height
         verticalAlignment: Text.AlignVCenter
         elide: Text.ElideRight
-        color: Color.foreground
+        color: Ink.title(Color.foreground, Color.background)
         font.pixelSize: 20
         font.bold: true
         text: "Settings"
@@ -124,7 +125,7 @@ Item {
     }
 
     Text {
-      color: Color.muted
+      color: Ink.meta(Color.foreground, Color.background)
       font.pixelSize: 12
       text: root.service && root.service.connected
         ? "Connected to finalbossd"
@@ -145,7 +146,7 @@ Item {
     }
 
     Text {
-      color: Color.foreground
+      color: Ink.title(Color.foreground, Color.background)
       font.pixelSize: 14
       font.bold: true
       text: "Playback"
@@ -158,7 +159,7 @@ Item {
         width: Math.max(0, parent.width - root.actionWidth - root.actionGap)
         anchors.verticalCenter: parent.verticalCenter
         wrapMode: Text.Wrap
-        color: Color.muted
+        color: Ink.quiet(Color.foreground, Color.background)
         font.pixelSize: 12
         text: "Play each song at a similar loudness. The volume slider still sets the overall level."
       }
@@ -173,7 +174,7 @@ Item {
     }
 
     Text {
-      color: Color.foreground
+      color: Ink.title(Color.foreground, Color.background)
       font.pixelSize: 14
       font.bold: true
       text: "Music folders"
@@ -195,7 +196,7 @@ Item {
           anchors.leftMargin: 10
           anchors.rightMargin: 10
           verticalAlignment: TextInput.AlignVCenter
-          color: Color.foreground
+          color: Ink.title(Color.foreground, Color.background)
           font.pixelSize: 13
           clip: true
           selectByMouse: true
@@ -204,7 +205,7 @@ Item {
           Text {
             anchors.fill: parent
             verticalAlignment: Text.AlignVCenter
-            color: Color.muted
+            color: Ink.quiet(Color.foreground, Color.background)
             font.pixelSize: 13
             visible: pathInput.text === "" && !pathInput.activeFocus
             text: "/path/to/Music"
@@ -230,7 +231,7 @@ Item {
           anchors.verticalCenter: parent.verticalCenter
           width: Math.max(0, parent.width - root.actionWidth - root.actionGap)
           elide: Text.ElideMiddle
-          color: Color.foreground
+          color: Ink.title(Color.foreground, Color.background)
           font.pixelSize: 13
           text: String(folderRow.modelData)
         }
@@ -281,7 +282,7 @@ Item {
           anchors.left: metaBox.right
           anchors.leftMargin: 8
           anchors.verticalCenter: parent.verticalCenter
-          color: Color.foreground
+          color: Ink.title(Color.foreground, Color.background)
           font.pixelSize: 13
           text: "Update metadata while scanning"
         }
@@ -298,7 +299,7 @@ Item {
         width: Math.max(0, metadataRow.width - metadataToggle.width - metadataRow.spacing)
         anchors.verticalCenter: parent.verticalCenter
         wrapMode: Text.Wrap
-        color: Color.muted
+        color: Ink.quiet(Color.foreground, Color.background)
         font.pixelSize: 12
         text: "Fill in missing genre and album art from MusicBrainz. Your files are not modified."
       }
@@ -312,7 +313,7 @@ Item {
         width: Math.max(0, rescanRow.width - root.actionWidth - root.actionGap)
         anchors.verticalCenter: parent.verticalCenter
         wrapMode: Text.Wrap
-        color: Color.muted
+        color: Ink.meta(Color.foreground, Color.background)
         font.pixelSize: 12
         text: root.metadataText !== ""
           ? root.scanText + "  \u00B7  " + root.metadataText
@@ -333,7 +334,7 @@ Item {
       visible: root.statusText !== ""
       width: Math.min(root.formWidth, parent.width)
       wrapMode: Text.Wrap
-      color: root.statusIsError ? Color.urgent : Color.muted
+      color: root.statusIsError ? Color.urgent : Ink.meta(Color.foreground, Color.background)
       font.pixelSize: 12
       text: root.statusText
     }

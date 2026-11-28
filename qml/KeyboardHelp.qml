@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import qs.Commons
+import "ink.js" as Ink
 
 // Keyboard reference shown at the bottom of Settings.
 Column {
@@ -46,7 +47,7 @@ Column {
 
   Text {
     width: root.width
-    color: Color.foreground
+    color: Ink.title(Color.foreground, Color.background)
     font.pixelSize: 14
     font.bold: true
     text: "Keyboard"
@@ -55,7 +56,7 @@ Column {
   Text {
     width: root.width
     wrapMode: Text.Wrap
-    color: Color.muted
+    color: Ink.quiet(Color.foreground, Color.background)
     font.pixelSize: 12
     lineHeight: 1.35
     text: "Playback keys work anywhere in the window. Ctrl+C opens the album, artist, or library this queue came from and centers the playing song, from any page. Tab and Shift+Tab move one highlight between the sidebar and the list on the page. Up and Down move one row. In the cover grid, Left and Right move across that row. Page Up and Page Down jump one screen. Ctrl+Home and Ctrl+End jump to the first and last item. Enter opens the highlighted menu page, plays the highlighted track, or opens the highlighted album or artist. With the highlight on this page, Up, Down, Page Up, Page Down, Ctrl+Home, and Ctrl+End scroll this text. While the cursor is in Search or the folder path, the arrow keys edit the text and Ctrl+C copies. Click outside the field to leave it. Tab leaves the field for the list, and Shift+Tab leaves it for the sidebar. Enter in the search field highlights the first result and does not play it. Enter on that result plays it. Space still pauses or resumes the song that is already playing. Ctrl+L switches every page to the list, and Ctrl+T switches every page to tiles. The highlight stays where the last key put it."
@@ -70,7 +71,7 @@ Column {
       spacing: 8
 
       Text {
-        color: Color.foreground
+        color: Ink.title(Color.foreground, Color.background)
         font.pixelSize: 13
         font.bold: true
         text: group.modelData.title
@@ -96,7 +97,7 @@ Column {
             Text {
               id: keyText
               anchors.centerIn: parent
-              color: Color.foreground
+              color: Ink.title(Color.foreground, Color.background)
               font.pixelSize: 12
               font.family: "monospace"
               text: line.modelData.keys
@@ -110,7 +111,7 @@ Column {
             anchors.right: parent.right
             anchors.verticalCenter: parent.verticalCenter
             wrapMode: Text.Wrap
-            color: Color.foreground
+            color: Ink.title(Color.foreground, Color.background)
             font.pixelSize: 13
             text: line.modelData.action
           }

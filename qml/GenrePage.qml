@@ -2,6 +2,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Layouts
 import qs.Commons
+import "ink.js" as Ink
 
 // Genres list (query kind "genres"); selecting one shows that genre's tracks
 // (kind "genre", q = genre name). List and tiles follow the shared view toggle.
@@ -89,13 +90,13 @@ Item {
       Text {
         Layout.fillWidth: true
         elide: Text.ElideRight
-        color: Color.foreground
+        color: Ink.title(Color.foreground, Color.background)
         font.pixelSize: 20
         font.bold: true
         text: "Genres"
       }
       Text {
-        color: Color.muted
+        color: Ink.meta(Color.foreground, Color.background)
         font.pixelSize: 12
         text: root.loading ? "Loading\u2026" : root.genres.length + " genres"
       }
@@ -146,7 +147,7 @@ Item {
         spacing: 4
 
         Text {
-          color: backArea.containsMouse ? Color.accent : Color.muted
+          color: backArea.containsMouse ? Color.accent : Ink.meta(Color.foreground, Color.background)
           font.pixelSize: 14
           text: "\u2190 Genres"
           MouseArea {
@@ -160,14 +161,14 @@ Item {
         Text {
           Layout.fillWidth: true
           elide: Text.ElideRight
-          color: Color.foreground
+          color: Ink.title(Color.foreground, Color.background)
           font.pixelSize: 20
           font.bold: true
           text: root.selected ? String(root.selected.name || "Unknown genre") : ""
         }
         Text {
           Layout.fillWidth: true
-          color: Color.muted
+          color: Ink.meta(Color.foreground, Color.background)
           font.pixelSize: 12
           text: root.loading ? "Loading\u2026" : root.tracks.length + " tracks"
         }

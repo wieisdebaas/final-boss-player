@@ -32,7 +32,9 @@ Item {
   property bool keyboardFocused: false
   readonly property int keyboardCount: Array.isArray(items) ? items.length : 0
   readonly property int keyboardStride: tiled ? cellHeight : 52
-  readonly property color metaColor: Ink.secondary(Color.foreground, Color.background)
+  readonly property color titleColor: Ink.title(Color.foreground, Color.background)
+  readonly property color metaColor: Ink.meta(Color.foreground, Color.background)
+  readonly property color quietColor: Ink.quiet(Color.foreground, Color.background)
 
   function publishKeyboard() {
     if (keyboardIndex >= keyboardCount)
@@ -222,7 +224,7 @@ Item {
         Text {
           width: parent.width
           elide: Text.ElideRight
-          color: Color.foreground
+          color: root.titleColor
           font.pixelSize: 13
           text: String(row.modelData.name || "Unknown")
         }
@@ -231,7 +233,6 @@ Item {
           elide: Text.ElideRight
           color: root.metaColor
           font.pixelSize: 12
-          font.weight: Font.Medium
           text: root.secondaryOf(row.modelData)
         }
       }
@@ -347,7 +348,7 @@ Item {
           Text {
             width: parent.width
             elide: Text.ElideRight
-            color: Color.foreground
+            color: root.titleColor
             font.pixelSize: 13
             text: String(tile.modelData.name || "Unknown")
           }
@@ -356,7 +357,6 @@ Item {
             elide: Text.ElideRight
             color: root.metaColor
             font.pixelSize: 12
-            font.weight: Font.Medium
             text: root.secondaryOf(tile.modelData)
           }
         }
@@ -386,7 +386,7 @@ Item {
   Text {
     anchors.centerIn: parent
     visible: !root.items || root.items.length === 0
-    color: Color.muted
+    color: root.quietColor
     font.pixelSize: 13
     text: root.emptyText
   }

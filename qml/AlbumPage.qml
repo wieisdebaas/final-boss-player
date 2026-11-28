@@ -2,6 +2,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Layouts
 import qs.Commons
+import "ink.js" as Ink
 
 // Albums list (query kind "albums"); selecting one shows its tracks
 // (kind "album", q = album id) with a Play album button (play_album RPC).
@@ -89,13 +90,13 @@ Item {
       Text {
         Layout.fillWidth: true
         elide: Text.ElideRight
-        color: Color.foreground
+        color: Ink.title(Color.foreground, Color.background)
         font.pixelSize: 20
         font.bold: true
         text: "Albums"
       }
       Text {
-        color: Color.muted
+        color: Ink.meta(Color.foreground, Color.background)
         font.pixelSize: 12
         text: root.loading ? "Loading\u2026" : root.albums.length + " albums"
       }
@@ -146,7 +147,7 @@ Item {
         spacing: 4
 
         Text {
-          color: backArea.containsMouse ? Color.accent : Color.muted
+          color: backArea.containsMouse ? Color.accent : Ink.meta(Color.foreground, Color.background)
           font.pixelSize: 14
           text: "\u2190 Albums"
           MouseArea {
@@ -160,7 +161,7 @@ Item {
         Text {
           Layout.fillWidth: true
           elide: Text.ElideRight
-          color: Color.foreground
+          color: Ink.title(Color.foreground, Color.background)
           font.pixelSize: 20
           font.bold: true
           text: root.selected ? String(root.selected.name || "Unknown album") : ""
@@ -168,7 +169,7 @@ Item {
         Text {
           Layout.fillWidth: true
           elide: Text.ElideRight
-          color: Color.muted
+          color: Ink.meta(Color.foreground, Color.background)
           font.pixelSize: 12
           text: {
             if (!root.selected) return ""

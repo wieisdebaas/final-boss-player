@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import qs.Commons
+import "ink.js" as Ink
 
 // Round transport control. `primary` is the filled play disc; `active` is the
 // same fill used when shuffle is on.
@@ -55,7 +56,7 @@ Item {
       verticalAlignment: Text.AlignVCenter
       color: (root.primary || root.active)
         ? Color.background
-        : (area.containsMouse ? Color.accent : Color.foreground)
+        : (area.containsMouse ? Color.accent : Ink.title(Color.foreground, Color.background))
       font.pixelSize: 14
       text: root.glyph
     }

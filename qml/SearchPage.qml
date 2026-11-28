@@ -3,6 +3,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import qs.Commons
+import "ink.js" as Ink
 
 // Debounced track search (query kind "search"). Ctrl+F focuses the field.
 Item {
@@ -124,7 +125,7 @@ Item {
       Text {
         Layout.fillWidth: true
         elide: Text.ElideRight
-        color: Color.foreground
+        color: Ink.title(Color.foreground, Color.background)
         font.pixelSize: 20
         font.bold: true
         text: "Search"
@@ -149,7 +150,7 @@ Item {
         anchors.leftMargin: 12
         anchors.rightMargin: 12
         verticalAlignment: TextInput.AlignVCenter
-        color: Color.foreground
+        color: Ink.title(Color.foreground, Color.background)
         selectionColor: Color.accent
         selectedTextColor: Color.background
         font.pixelSize: 13
@@ -162,7 +163,7 @@ Item {
         Text {
           anchors.verticalCenter: parent.verticalCenter
           visible: input.text === ""
-          color: Color.muted
+          color: Ink.quiet(Color.foreground, Color.background)
           font.pixelSize: 13
           text: "Tracks, artists, albums, genres \u2014 separate with commas"
         }
@@ -174,7 +175,7 @@ Item {
       spacing: 6
 
       Text {
-        color: Color.muted
+        color: Ink.meta(Color.foreground, Color.background)
         font.pixelSize: 12
         text: "Match"
       }
@@ -201,12 +202,12 @@ Item {
           border.width: 1
           border.color: on
             ? Color.accent
-            : Qt.rgba(Color.foreground.r, Color.foreground.g, Color.foreground.b, 0.28)
+            : Ink.ring(Color.foreground, Color.background)
           Text {
             id: matchLabel
             anchors.centerIn: parent
             text: matchChip.modelData.label
-            color: matchChip.on ? Color.accent : Color.foreground
+            color: matchChip.on ? Color.accent : Ink.meta(Color.foreground, Color.background)
             font.pixelSize: 12
           }
           MouseArea {
@@ -220,7 +221,7 @@ Item {
       Item { Layout.fillWidth: true }
 
       Text {
-        color: Color.muted
+        color: Ink.meta(Color.foreground, Color.background)
         font.pixelSize: 12
         text: "Genre"
       }
@@ -239,7 +240,7 @@ Item {
           leftPadding: 10
           rightPadding: 18
           text: genreBox.displayText
-          color: Color.foreground
+          color: Ink.title(Color.foreground, Color.background)
           font.pixelSize: 12
           verticalAlignment: Text.AlignVCenter
           elide: Text.ElideRight
@@ -248,7 +249,7 @@ Item {
           x: genreBox.width - width - 8
           anchors.verticalCenter: parent.verticalCenter
           text: "\u25BE"
-          color: Color.muted
+          color: Ink.quiet(Color.foreground, Color.background)
           font.pixelSize: 10
         }
         background: Rectangle {
@@ -265,7 +266,7 @@ Item {
           highlighted: genreBox.highlightedIndex === index
           contentItem: Text {
             text: model.name
-            color: Color.foreground
+            color: Ink.title(Color.foreground, Color.background)
             font.pixelSize: 12
             verticalAlignment: Text.AlignVCenter
             leftPadding: 10
@@ -314,7 +315,7 @@ Item {
     }
 
     Text {
-      color: root.errorText !== "" ? Color.urgent : Color.muted
+      color: root.errorText !== "" ? Color.urgent : Ink.meta(Color.foreground, Color.background)
       font.pixelSize: 12
       visible: root.errorText !== "" || root.loading || root.queryText.trim() !== ""
       text: root.errorText !== "" ? root.errorText

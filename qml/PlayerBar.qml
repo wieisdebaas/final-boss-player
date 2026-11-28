@@ -22,7 +22,9 @@ Rectangle {
     ? Math.max(0, Math.min(1, positionMs / durationMs)) : 0
   readonly property real volume: snapshot ? Math.max(0, Math.min(1, Number(snapshot.volume))) : 0
   readonly property var trackInfo: service ? service.track : null
-  readonly property color metaColor: Ink.secondary(Color.foreground, Color.background)
+  readonly property color titleColor: Ink.title(Color.foreground, Color.background)
+  readonly property color metaColor: Ink.meta(Color.foreground, Color.background)
+  readonly property color quietColor: Ink.quiet(Color.foreground, Color.background)
   readonly property int albumId: trackInfo && trackInfo.album_id !== undefined && trackInfo.album_id !== null
     ? Number(trackInfo.album_id) : -1
   readonly property bool trackHasArt: !!trackInfo && trackInfo.has_art === true && albumId >= 0
@@ -126,7 +128,7 @@ Rectangle {
       Text {
         anchors.centerIn: parent
         visible: root.artPath === ""
-        color: Color.muted
+        color: root.quietColor
         font.pixelSize: 18
         text: "\u266A"
       }
@@ -143,7 +145,7 @@ Rectangle {
         width: parent.width
         elide: Text.ElideRight
         color: footerTitleArea.containsMouse && footerTitleArea.enabled
-          ? Color.accent : Color.foreground
+          ? Color.accent : root.titleColor
         font.pixelSize: 14
         font.bold: true
         font.underline: footerTitleArea.containsMouse && footerTitleArea.enabled
@@ -187,7 +189,6 @@ Rectangle {
           width: Math.min(implicitWidth, footerByline.pieceWidth)
           color: footerArtistArea.containsMouse ? Color.accent : root.metaColor
           font.pixelSize: 12
-          font.weight: Font.Medium
           font.underline: footerArtistArea.containsMouse
           text: footerByline.artistName
           visible: text !== ""
@@ -213,7 +214,6 @@ Rectangle {
           width: Math.min(implicitWidth, footerByline.pieceWidth)
           color: footerAlbumArea.containsMouse ? Color.accent : root.metaColor
           font.pixelSize: 12
-          font.weight: Font.Medium
           font.underline: footerAlbumArea.containsMouse
           text: footerByline.albumName
           visible: text !== ""
@@ -239,7 +239,6 @@ Rectangle {
           width: Math.min(implicitWidth, footerByline.pieceWidth)
           color: footerGenreArea.containsMouse ? Color.accent : root.metaColor
           font.pixelSize: 12
-          font.weight: Font.Medium
           font.underline: footerGenreArea.containsMouse
           text: footerByline.genreName
           visible: text !== ""
@@ -305,7 +304,7 @@ Rectangle {
         spacing: 8
 
         Text {
-          color: Color.muted
+          color: root.metaColor
           font.pixelSize: 11
           text: root.formatTime(root.positionMs)
         }
@@ -334,7 +333,7 @@ Rectangle {
           }
         }
         Text {
-          color: Color.muted
+          color: root.metaColor
           font.pixelSize: 11
           text: root.formatTime(root.durationMs)
         }

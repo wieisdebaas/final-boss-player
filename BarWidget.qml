@@ -2,6 +2,7 @@ import QtQuick
 import qs.Commons
 import qs.Commons as Commons
 import qs.Ui
+import "qml/ink.js" as Ink
 
 // Bar entry + mini-player popup. All state comes from Service.qml
 // (`player`); this file never talks to the daemon socket directly except
@@ -206,7 +207,7 @@ BarWidget {
               anchors.centerIn: parent
               visible: root.artPath === ""
               text: "\u266A"
-              color: root.foreground
+              color: Ink.meta(root.foreground, Commons.Color.background)
               font.family: root.bar ? root.bar.fontFamily : ""
               font.pixelSize: Style.font.displayLarge
             }
@@ -220,7 +221,7 @@ BarWidget {
               width: parent.width
               textFormat: Text.PlainText
               elide: Text.ElideRight
-              color: root.foreground
+              color: Ink.title(root.foreground, Commons.Color.background)
               font.family: root.bar ? root.bar.fontFamily : ""
               font.pixelSize: Style.font.subtitle
               font.bold: true
@@ -233,7 +234,7 @@ BarWidget {
               visible: text !== ""
               textFormat: Text.PlainText
               elide: Text.ElideRight
-              color: Qt.darker(root.foreground, 1.3)
+              color: Ink.meta(root.foreground, Commons.Color.background)
               font.family: root.bar ? root.bar.fontFamily : ""
               font.pixelSize: Style.font.bodySmall
               text: root.artist
@@ -367,7 +368,7 @@ BarWidget {
 
         Text {
           anchors.horizontalCenter: parent.horizontalCenter
-          color: Qt.darker(root.foreground, 1.5)
+          color: Ink.meta(root.foreground, Commons.Color.background)
           font.family: root.bar ? root.bar.fontFamily : ""
           font.pixelSize: Style.font.caption
           text: "Open library"

@@ -5,6 +5,7 @@ import qs.Commons
 import qs.Ui
 
 import "qml"
+import "qml/ink.js" as Ink
 
 // Full player window: sidebar + page stack + PlayerBar + keyboard shortcuts.
 // All state lives in Service.qml; the host injects `service`.
@@ -482,7 +483,7 @@ Item {
                   anchors.verticalCenter: parent.verticalCenter
                   anchors.left: parent.left
                   anchors.leftMargin: 12
-                  color: item.selected ? Color.accent : Color.foreground
+                  color: item.selected ? Color.accent : Ink.title(Color.foreground, Color.background)
                   font.pixelSize: 13
                   text: item.modelData.label
                 }

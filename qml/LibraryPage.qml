@@ -2,6 +2,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Layouts
 import qs.Commons
+import "ink.js" as Ink
 
 // Flat track list from the daemon's `query` RPC (kind "tracks").
 Item {
@@ -49,14 +50,14 @@ Item {
     Text {
       Layout.fillWidth: true
       elide: Text.ElideRight
-      color: Color.foreground
+      color: Ink.title(Color.foreground, Color.background)
       font.pixelSize: 20
       font.bold: true
       text: "Library"
     }
 
     Text {
-      color: Color.muted
+      color: Ink.meta(Color.foreground, Color.background)
       font.pixelSize: 12
       text: root.loading ? "Loading\u2026" : root.tracks.length + " tracks"
     }
@@ -89,7 +90,7 @@ Item {
     anchors.top: list.verticalCenter
     anchors.topMargin: 24
     visible: !root.loading && root.tracks.length === 0 && root.errorText === ""
-    color: Color.muted
+    color: Ink.quiet(Color.foreground, Color.background)
     font.pixelSize: 12
     text: "Add a music folder in Settings."
   }

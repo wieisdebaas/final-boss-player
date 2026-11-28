@@ -2,6 +2,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Controls
 import qs.Commons
+import "ink.js" as Ink
 
 // List / tiles switch. Every page puts this at the right of its header.
 // The choice lives on the service, so one click changes every page.
@@ -38,7 +39,8 @@ Row {
         width: 14
         height: 14
         readonly property color ink: button.on ? Color.accent
-          : (area.containsMouse ? Color.foreground : Color.muted)
+          : (area.containsMouse ? Ink.title(Color.foreground, Color.background)
+            : Ink.meta(Color.foreground, Color.background))
 
         Column {
           anchors.centerIn: parent

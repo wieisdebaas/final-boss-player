@@ -2,6 +2,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Layouts
 import qs.Commons
+import "ink.js" as Ink
 
 // Landing page: library stats and the most recently added tracks.
 Item {
@@ -57,7 +58,7 @@ Item {
       Text {
         Layout.fillWidth: true
         elide: Text.ElideRight
-        color: Color.foreground
+        color: Ink.title(Color.foreground, Color.background)
         font.pixelSize: 20
         font.bold: true
         text: "Just added"
@@ -66,7 +67,7 @@ Item {
       Text {
         Layout.fillWidth: true
         elide: Text.ElideRight
-        color: root.errorText !== "" ? Color.urgent : Color.muted
+        color: root.errorText !== "" ? Color.urgent : Ink.meta(Color.foreground, Color.background)
         font.pixelSize: 12
         text: root.errorText !== "" ? root.errorText
           : (root.loading ? "Loading\u2026"

@@ -51,7 +51,9 @@ Item {
   property bool keyboardFocused: false
   readonly property int keyboardCount: Array.isArray(tracks) ? tracks.length : 0
   readonly property int rowHeight: covers ? 52 : 44
-  readonly property color metaColor: Ink.secondary(Color.foreground, Color.background)
+  readonly property color titleColor: Ink.title(Color.foreground, Color.background)
+  readonly property color metaColor: Ink.meta(Color.foreground, Color.background)
+  readonly property color quietColor: Ink.quiet(Color.foreground, Color.background)
   readonly property int keyboardStride: tiled ? cellHeight : rowHeight
 
   function publishKeyboard() {
@@ -241,7 +243,7 @@ Item {
         width: 28
         anchors.verticalCenter: parent.verticalCenter
         horizontalAlignment: Text.AlignRight
-        color: row.isCurrent ? Color.accent : Color.muted
+        color: row.isCurrent ? Color.accent : root.metaColor
         font.pixelSize: 12
         text: row.isCurrent && root.service && root.service.playing
           ? "\u23F8"
@@ -291,7 +293,7 @@ Item {
         Text {
           width: parent.width
           elide: Text.ElideRight
-          color: row.isCurrent ? Color.accent : Color.foreground
+          color: row.isCurrent ? Color.accent : root.titleColor
           font.pixelSize: 13
           text: String(row.modelData.title || "Untitled")
         }
@@ -315,9 +317,8 @@ Item {
             maximumLineCount: 1
             width: Math.min(implicitWidth, byline.pieceWidth)
             color: artistArea.containsMouse ? Color.accent : root.metaColor
-            font.pixelSize: 12
-            font.weight: Font.Medium
-            font.underline: artistArea.containsMouse
+          font.pixelSize: 12
+          font.underline: artistArea.containsMouse
             text: String(row.modelData.artist || "")
             visible: text !== ""
             MouseArea {
@@ -344,9 +345,8 @@ Item {
             maximumLineCount: 1
             width: Math.min(implicitWidth, byline.pieceWidth)
             color: albumArea.containsMouse ? Color.accent : root.metaColor
-            font.pixelSize: 12
-            font.weight: Font.Medium
-            font.underline: albumArea.containsMouse
+          font.pixelSize: 12
+          font.underline: albumArea.containsMouse
             text: String(row.modelData.album || "")
             visible: text !== ""
             MouseArea {
@@ -373,9 +373,8 @@ Item {
             maximumLineCount: 1
             width: Math.min(implicitWidth, byline.pieceWidth)
             color: genreArea.containsMouse ? Color.accent : root.metaColor
-            font.pixelSize: 12
-            font.weight: Font.Medium
-            font.underline: genreArea.containsMouse
+          font.pixelSize: 12
+          font.underline: genreArea.containsMouse
             text: String(row.modelData.genre || "")
             visible: text !== ""
             MouseArea {
@@ -526,7 +525,7 @@ Item {
           anchors.leftMargin: 8
           anchors.rightMargin: 8
           elide: Text.ElideRight
-          color: tile.isCurrent ? Color.accent : Color.foreground
+          color: tile.isCurrent ? Color.accent : root.titleColor
           font.pixelSize: 13
           text: String(tile.modelData.title || "Untitled")
         }
@@ -538,7 +537,6 @@ Item {
           elide: Text.ElideRight
           color: root.metaColor
           font.pixelSize: 12
-          font.weight: Font.Medium
           text: [tile.modelData.artist, tile.modelData.album, tile.modelData.genre]
             .filter(function(part) { return !!part }).join(" \u00B7 ")
         }
@@ -557,7 +555,7 @@ Item {
   Text {
     anchors.centerIn: parent
     visible: !root.tracks || root.tracks.length === 0
-    color: Color.muted
+    color: root.quietColor
     font.pixelSize: 13
     text: root.emptyText
   }
